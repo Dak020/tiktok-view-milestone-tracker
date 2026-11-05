@@ -24,8 +24,6 @@ export const Route = createFileRoute("/api/public/jobs/check-posts")({
           const r = await checkPost(supabaseAdmin, p);
           if (r.ok) ok++;
           else failed++;
-          // free provider allows ~1 req/sec
-          await new Promise((res) => setTimeout(res, 1100));
         }
         return Response.json({ checked: ok, failed });
       },

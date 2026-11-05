@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicJobsCheckPostsRouteImport } from './routes/api/public/jobs/check-posts'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicJobsCheckPostsRoute = ApiPublicJobsCheckPostsRouteImport.update({
+  id: '/api/public/jobs/check-posts',
+  path: '/api/public/jobs/check-posts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/jobs/check-posts': typeof ApiPublicJobsCheckPostsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/jobs/check-posts': typeof ApiPublicJobsCheckPostsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/jobs/check-posts': typeof ApiPublicJobsCheckPostsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/public/jobs/check-posts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/public/jobs/check-posts'
+  id: '__root__' | '/' | '/api/public/jobs/check-posts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicJobsCheckPostsRoute: typeof ApiPublicJobsCheckPostsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/jobs/check-posts': {
+      id: '/api/public/jobs/check-posts'
+      path: '/api/public/jobs/check-posts'
+      fullPath: '/api/public/jobs/check-posts'
+      preLoaderRoute: typeof ApiPublicJobsCheckPostsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicJobsCheckPostsRoute: ApiPublicJobsCheckPostsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
