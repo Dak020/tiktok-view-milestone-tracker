@@ -67,7 +67,6 @@ async function fetchViaDirectTikTok(url: string): Promise<TikTokStats> {
   if (!res.ok) throw new Error(`TikTok direct fetch HTTP ${res.status}`);
   const html = await res.text();
 
-  // TikTok embeds initial page state in JSON scripts
   const scriptRegex = /<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application\/json">(.*?)<\/script>/s;
   const match = html.match(scriptRegex);
   if (!match || !match[1]) {
@@ -131,7 +130,6 @@ export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
   const key = process.env["TIKTOK_SCRAPER_API_KEY"];
   const errors: string[] = [];
 
-  // 1. Try RapidAPI if a key exists
   if (key) {
     try {
       return await fetchViaRapidApi(url, key);
@@ -140,14 +138,12 @@ export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
     }
   }
 
-  // 2. Try direct TikTok public page extraction
   try {
     return await fetchViaDirectTikTok(url);
   } catch (err) {
     errors.push(`Direct TikTok: ${(err as Error).message}`);
   }
 
-  // 3. Try TikWM
   try {
     return await fetchViaTikWm(url);
   } catch (err) {
