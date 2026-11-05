@@ -14,7 +14,189 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      milestones: {
+        Row: {
+          hit_at: string | null
+          id: string
+          notified: boolean
+          post_id: string
+          target_views: number
+          user_id: string
+        }
+        Insert: {
+          hit_at?: string | null
+          id?: string
+          notified?: boolean
+          post_id: string
+          target_views: number
+          user_id?: string
+        }
+        Update: {
+          hit_at?: string | null
+          id?: string
+          notified?: boolean
+          post_id?: string
+          target_views?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "milestones_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          post_id: string | null
+          read: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          post_id?: string | null
+          read?: boolean
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          post_id?: string | null
+          read?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          caption: string | null
+          comments: number | null
+          created_at: string
+          current_views: number
+          failure_count: number
+          id: string
+          last_checked_at: string | null
+          last_error: string | null
+          likes: number | null
+          nickname: string | null
+          shares: number | null
+          status: string
+          thumbnail_url: string | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          caption?: string | null
+          comments?: number | null
+          created_at?: string
+          current_views?: number
+          failure_count?: number
+          id?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          likes?: number | null
+          nickname?: string | null
+          shares?: number | null
+          status?: string
+          thumbnail_url?: string | null
+          url: string
+          user_id?: string
+        }
+        Update: {
+          caption?: string | null
+          comments?: number | null
+          created_at?: string
+          current_views?: number
+          failure_count?: number
+          id?: string
+          last_checked_at?: string | null
+          last_error?: string | null
+          likes?: number | null
+          nickname?: string | null
+          shares?: number | null
+          status?: string
+          thumbnail_url?: string | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          ntfy_topic: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ntfy_topic?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          ntfy_topic?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      view_snapshots: {
+        Row: {
+          checked_at: string
+          comments: number | null
+          id: string
+          likes: number | null
+          post_id: string
+          shares: number | null
+          user_id: string
+          views: number
+        }
+        Insert: {
+          checked_at?: string
+          comments?: number | null
+          id?: string
+          likes?: number | null
+          post_id: string
+          shares?: number | null
+          user_id?: string
+          views: number
+        }
+        Update: {
+          checked_at?: string
+          comments?: number | null
+          id?: string
+          likes?: number | null
+          post_id?: string
+          shares?: number | null
+          user_id?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "view_snapshots_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
