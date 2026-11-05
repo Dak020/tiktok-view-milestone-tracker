@@ -42,6 +42,27 @@ export const checkNow = createServerFn({ method: "POST" })
     return checkPost(supabaseAdmin, post);
   });
 
+export const checkAllPosts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: posts, error } = await context.supabase
+      .from("posts")
+      .select("*")
+      .eq("user_id", context.userId)
+      .eq("status", "active");
+    if (error) throw new Error(error.message);
+    
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { checkPost } = await import("./tracker.server");
+    
+    let checked = 0;
+    for (const p of posts ?? []) {
+      await checkPost(supabaseAdmin, p);
+      checked++;
+    }
+    return { ok: true, checked };
+  });
+
 export const sendTestNotification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
