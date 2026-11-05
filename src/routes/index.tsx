@@ -1,23 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// The home route ships no og:image, so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "ViewPulse — TikTok view tracker" },
+      { name: "description", content: "Track TikTok post views and get pinged when milestones hit." },
+      { property: "og:title", content: "ViewPulse — TikTok view tracker" },
+      { property: "og:description", content: "Track TikTok post views and get pinged when milestones hit." },
+    ],
+  }),
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard" });
+  },
 });
-
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
