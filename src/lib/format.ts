@@ -47,14 +47,14 @@ export function gainedSince(current: number, snaps: Snap[], windowMs: number, no
     .filter((s) => new Date(s.checked_at).getTime() >= cutoff)
     .sort((a, b) => new Date(a.checked_at).getTime() - new Date(b.checked_at).getTime());
   if (inWindow.length === 0) return null;
-  return Math.max(0, current - inWindow[0].views);
+  return Math.max(0, current - inWindow[0]!.views);
 }
 
 export function parseViews(input: string): number | null {
   const m = input.trim().toLowerCase().replace(/,/g, "").match(/^(\d+(?:\.\d+)?)\s*([km]?)$/);
   if (!m) return null;
   const mult = m[2] === "k" ? 1_000 : m[2] === "m" ? 1_000_000 : 1;
-  const v = Math.round(parseFloat(m[1]) * mult);
+  const v = Math.round(parseFloat(m[1]!) * mult);
   return v > 0 ? v : null;
 }
 

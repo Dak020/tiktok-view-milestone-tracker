@@ -35,12 +35,18 @@ function SettingsPage() {
 
   async function save() {
     const t = topic.trim();
-    if (t && !/^[A-Za-z0-9_-]{1,64}$/.test(t)) return toast.error("Use letters, numbers, - or _ only");
+    if (t && !/^[A-Za-z0-9_-]{1,64}$/.test(t)) {
+      toast.error("Use letters, numbers, - or _ only");
+      throw new Error("Invalid topic");
+    }
     const { data: u } = await supabase.auth.getUser();
     const { error } = await supabase
       .from("user_settings")
       .upsert({ user_id: u.user!.id, ntfy_topic: t || null, updated_at: new Date().toISOString() });
-    if (error) return toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      throw error;
+    }
     toast.success("Saved");
   }
 
@@ -68,7 +74,7 @@ function SettingsPage() {
           </p>
           <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="my-secret-topic" className="h-12 font-mono text-base" />
           <div className="grid grid-cols-2 gap-2">
-            <Button className="h-12" onClick={save}>Save</Button>
+            <Button className="h-12" onClick={() => save().catch(() => {})}>Save</Button>
             <Button variant="secondary" className="h-12" onClick={sendTest} disabled={busy}>
               <BellRing className="h-4 w-4" /> Send test
             </Button>

@@ -55,15 +55,15 @@ export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
   }
   const d = json.data;
   const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v) || null);
-  const views = num(d.play_count);
+  const views = num(d["play_count"]);
   if (views == null) throw new ScrapeError("No view count in response", false);
   return {
     views,
-    likes: num(d.digg_count),
-    comments: num(d.comment_count),
-    shares: num(d.share_count),
-    caption: (d.title as string) || null,
-    thumbnail: (d.cover as string) || (d.origin_cover as string) || null,
+    likes: num(d["digg_count"]),
+    comments: num(d["comment_count"]),
+    shares: num(d["share_count"]),
+    caption: (d["title"] as string) || null,
+    thumbnail: (d["cover"] as string) || (d["origin_cover"] as string) || null,
   };
 }
 

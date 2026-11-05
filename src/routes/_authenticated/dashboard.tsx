@@ -160,8 +160,14 @@ function AddPostBox() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isTikTokUrl(url)) return toast.error("That doesn't look like a TikTok link");
-    if (milestones.length === 0) return toast.error("Pick at least one milestone");
+    if (!isTikTokUrl(url)) {
+      toast.error("That doesn't look like a TikTok link");
+      return;
+    }
+    if (milestones.length === 0) {
+      toast.error("Pick at least one milestone");
+      return;
+    }
     setBusy(true);
     try {
       const r = await add({ data: { url: url.trim(), nickname: nickname || undefined, milestones } });

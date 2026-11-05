@@ -11,7 +11,10 @@ export function MilestonePicker({ value, onChange }: { value: number[]; onChange
   const toggle = (n: number) => onChange(value.includes(n) ? value.filter((x) => x !== n) : [...value, n]);
   const addCustom = () => {
     const v = parseViews(custom);
-    if (!v) return toast.error("Try something like 250K or 2M");
+    if (!v) {
+      toast.error("Try something like 250K or 2M");
+      return;
+    }
     if (!value.includes(v)) onChange([...value, v]);
     setCustom("");
   };
