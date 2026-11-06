@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus } from "@/components/tracker/Icon";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { QUICK_MILESTONES, compact, parseViews } from "@/lib/format";
@@ -24,17 +24,17 @@ export function MilestonePicker({ value, onChange }: { value: number[]; onChange
         {all.map((n) => {
           const on = value.includes(n);
           return (
-            <button
+            <Button variant="secondary"
               type="button"
               key={n}
               onClick={() => toggle(n)}
-              className={`flex h-11 items-center gap-1 rounded-full border px-4 font-mono text-sm font-bold transition ${
-                on ? "border-primary bg-primary text-primary-foreground" : "bg-secondary hover:bg-accent"
+              className={`flex h-11 items-center gap-1 rounded-full border px-4 font-display text-[13px] font-semibold transition ${
+                on ? "silver-chip" : "dark-button hover:brightness-110"
               }`}
             >
               {compact(n)}
               {on && !QUICK_MILESTONES.includes(n) && <X className="h-3.5 w-3.5" />}
-            </button>
+            </Button>
           );
         })}
       </div>

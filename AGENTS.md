@@ -31,3 +31,5 @@ use the editor.
 
 - All TikTok scraping goes through `fetchTikTokStats` in src/lib/tracker.server.ts — swap providers only there so the cron job and "check now" stay in sync.
 - Milestones are claimed with a conditional update (`hit_at IS NULL`) before alerting, so each fires exactly once even if checks overlap.
+
+- Tracker visuals share semantic surface and gradient utilities in src/styles.css and a single inline SVG Icon component, so every screen stays consistent without altering tracking logic.

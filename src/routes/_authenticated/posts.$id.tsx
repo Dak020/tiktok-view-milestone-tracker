@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Circle, ExternalLink, Pause, Play, RefreshCw, Trash2, Pencil } from "lucide-react";
+import { CheckCircle2, Circle, ExternalLink, Pause, Play, RefreshCw, Trash2, Pencil } from "@/components/tracker/Icon";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { MilestonePicker } from "@/components/tracker/MilestonePicker";
@@ -22,6 +22,8 @@ import { compact, full, gainedSince, timeAgo } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/posts/$id")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Post details — ViewPulse" },
       { name: "description", content: "View growth chart and milestones for a tracked TikTok post." },
       { property: "og:title", content: "Post details — ViewPulse" },
@@ -80,8 +82,9 @@ function PostDetail() {
     <div className="min-h-screen pb-16">
       <AppHeader back title={post.nickname || "Post"} />
       <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
-        <section className="flex gap-4 rounded-2xl border bg-card p-4">
-          <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">
+        <section className="flex gap-4 surface-card">
+          <div className="grid h-28 w-20 shrink-0 place-items-center overflow-hidden rounded-[14px] border bg-secondary">
+            {!post.thumbnail_url && <Circle className="h-6 w-6 text-muted-foreground" />}
             {post.thumbnail_url && <img src={post.thumbnail_url} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />}
           </div>
           <div className="min-w-0 flex-1">
@@ -89,9 +92,9 @@ function PostDetail() {
               <p className="line-clamp-2 flex-1 text-sm text-muted-foreground">{post.caption || post.url}</p>
               <StatusBadge status={post.status} />
             </div>
-            <p className="mt-1 font-mono text-3xl font-bold">{full(post.current_views)}</p>
+            <p className="mt-1 font-mono text-[38px] leading-tight font-extrabold silver-text">{full(post.current_views)}</p>
             <p className="text-xs text-muted-foreground">views · checked {timeAgo(post.last_checked_at)}</p>
-            <a href={post.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm text-primary">
+            <a href={post.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center gap-1 text-sm text-primary underline underline-offset-4">
               Open on TikTok <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
@@ -101,15 +104,15 @@ function PostDetail() {
           <p className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">Last check failed: {post.last_error}</p>
         )}
 
-        <section className="grid grid-cols-3 gap-2 text-center sm:grid-cols-5">
-          <Stat label="Last hour" value={`+${compact(h1 ?? 0)}`} accent />
-          <Stat label="Last 24h" value={`+${compact(h24 ?? 0)}`} accent />
+        <section className="grid grid-cols-5 gap-2 text-center">
+          <Stat label="Hour" value={`+${compact(h1 ?? 0)}`} accent />
+          <Stat label="24h" value={`+${compact(h24 ?? 0)}`} accent />
           <Stat label="Likes" value={compact(post.likes)} />
-          <Stat label="Comments" value={compact(post.comments)} />
+          <Stat label="Replies" value={compact(post.comments)} />
           <Stat label="Shares" value={compact(post.shares)} />
         </section>
 
-        <section className="rounded-2xl border bg-card p-4">
+        <section className="surface-card">
           <h2 className="mb-3 font-bold">Views over time</h2>
           {chart.length < 2 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">The chart fills in as checks run every 20 minutes.</p>
@@ -119,27 +122,28 @@ function PostDetail() {
                 <AreaChart data={chart} margin={{ left: -10, right: 4, top: 4 }}>
                   <defs>
                     <linearGradient id="v" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
+                      <stop offset="0%" stopColor="var(--chart-fill)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--chart-fill)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                  <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tick={{ fill: "var(--label)", fontSize: 10 }}
                     tickFormatter={(t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric" })} />
-                  <YAxis tickFormatter={(v) => compact(v)} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} width={50} />
+                  <YAxis tickFormatter={(v) => compact(v)} tick={{ fill: "var(--label)", fontSize: 10 }} width={50} />
                   <Tooltip
-                    contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 12 }}
+                    cursor={{ stroke: "var(--chart-guide)", strokeWidth: 1 }}
+                    contentStyle={{ background: "var(--tile)", border: "1px solid var(--control-border)", borderRadius: 12 }}
                     labelFormatter={(t) => new Date(t as number).toLocaleString()}
                     formatter={(v) => [full(v as number), "Views"]}
                   />
-                  <Area dataKey="views" stroke="var(--primary)" strokeWidth={2} fill="url(#v)" />
+                  <Area dataKey="views" stroke="var(--chart-line)" strokeWidth={2} activeDot={{ r: 4, fill: "var(--highlight)", stroke: "var(--highlight)" }} fill="url(#v)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           )}
         </section>
 
-        <section className="rounded-2xl border bg-card p-4">
+        <section className="surface-card">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold">Milestones</h2>
             <EditMilestones postId={id} current={milestones} onSaved={refresh} />
@@ -158,15 +162,15 @@ function PostDetail() {
         </section>
 
         <section className="grid grid-cols-3 gap-2">
-          <Button variant="secondary" className="h-14 flex-col gap-1" onClick={runCheck} disabled={checking}>
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={runCheck} disabled={checking}>
             <RefreshCw className={`h-5 w-5 ${checking ? "animate-spin" : ""}`} /> Check now
           </Button>
-          <Button variant="secondary" className="h-14 flex-col gap-1" onClick={togglePause}>
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={togglePause}>
             {post.status === "active" ? <><Pause className="h-5 w-5" />Pause</> : <><Play className="h-5 w-5" />Resume</>}
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="secondary" className="h-14 flex-col gap-1 text-destructive"><Trash2 className="h-5 w-5" />Delete</Button>
+              <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px] text-destructive"><Trash2 className="h-5 w-5" />Delete</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -187,9 +191,9 @@ function PostDetail() {
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <p className={`font-mono text-lg font-bold ${accent ? "text-success" : ""}`}>{value}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+    <div className="inner-tile min-w-0 !px-1.5 !py-3">
+      <p className={`font-mono text-base sm:text-lg font-bold ${accent ? "text-success" : ""}`}>{value}</p>
+      <p className="text-[10px] sm:text-[11px] text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -217,7 +221,7 @@ function EditMilestones({
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setValue(current.map((m) => m.target_views)); }}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-10"><Pencil className="h-4 w-4" /> Edit</Button>
+        <Button variant="secondary" size="sm" className="h-10 rounded-full"><Pencil className="h-4 w-4" /> Edit</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Edit milestones</DialogTitle></DialogHeader>

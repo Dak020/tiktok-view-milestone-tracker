@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { BellRing, LogOut } from "lucide-react";
+import { BellRing, LogOut } from "@/components/tracker/Icon";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTestNotification } from "@/lib/tracker.functions";
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Settings — ViewPulse" },
       { name: "description", content: "Set your ntfy topic for milestone push alerts." },
       { property: "og:title", content: "Settings — ViewPulse" },
@@ -40,9 +42,10 @@ function SettingsPage() {
       throw new Error("Invalid topic");
     }
     const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
     const { error } = await supabase
       .from("user_settings")
-      .upsert({ user_id: u.user!.id, ntfy_topic: t || null, updated_at: new Date().toISOString() });
+      .upsert({ user_id: u.user.id, ntfy_topic: t || null, updated_at: new Date().toISOString() });
     if (error) {
       toast.error(error.message);
       throw error;
@@ -67,7 +70,7 @@ function SettingsPage() {
     <div className="min-h-screen pb-16">
       <AppHeader back title="Settings" />
       <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
-        <section className="space-y-3 rounded-2xl border bg-card p-4">
+        <section className="space-y-3 surface-card">
           <h2 className="font-bold">Push alerts (ntfy)</h2>
           <p className="text-sm text-muted-foreground">
             Install the ntfy app, subscribe to a topic name only you know, and enter that same name here.
@@ -80,7 +83,7 @@ function SettingsPage() {
             </Button>
           </div>
         </section>
-        <section className="flex items-center justify-between rounded-2xl border bg-card p-4">
+        <section className="flex items-center justify-between surface-card">
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Signed in as</p>
             <p className="truncate font-medium">{email}</p>
