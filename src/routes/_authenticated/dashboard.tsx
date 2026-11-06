@@ -194,6 +194,7 @@ function Dashboard() {
                 <Button
                   variant="ghost"
                   key={s}
+                  aria-pressed={sort === s}
                   onClick={() => setSort(s)}
                   className={`h-10 rounded-full px-2.5 text-xs font-semibold transition ${
                     sort === s ? "silver-chip text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"

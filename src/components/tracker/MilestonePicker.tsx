@@ -24,13 +24,12 @@ export function MilestonePicker({ value, onChange }: { value: number[]; onChange
         {all.map((n) => {
           const on = value.includes(n);
           return (
-            <Button variant="secondary"
+            <Button variant={on ? "chip" : "secondary"}
               type="button"
               key={n}
+              aria-pressed={on}
               onClick={() => toggle(n)}
-              className={`flex h-11 items-center gap-1 rounded-full border px-4 font-display text-[13px] font-semibold transition ${
-                on ? "silver-chip" : "dark-button hover:brightness-110"
-              }`}
+              className="flex h-11 items-center gap-1 rounded-full border px-4 font-display text-[13px] font-semibold transition"
             >
               {compact(n)}
               {on && !QUICK_MILESTONES.includes(n) && <X className="h-3.5 w-3.5" />}

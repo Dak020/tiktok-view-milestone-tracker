@@ -14,6 +14,7 @@ const buttonVariants = cva(
         outline:
           "dark-button text-secondary-foreground hover:brightness-110",
         secondary: "dark-button text-secondary-foreground hover:brightness-110",
+        chip: "silver-chip hover:brightness-110",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
