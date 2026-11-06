@@ -62,7 +62,7 @@ export const checkAllPosts = createServerFn({ method: "POST" })
         // Respect TikWM's 1-request-per-second limit
         await new Promise((r) => setTimeout(r, 1250));
       }
-      await checkPost(supabaseAdmin, postList[i]);
+      await checkPost(supabaseAdmin, postList[i]!);
       checked++;
     }
     return { ok: true, checked };
