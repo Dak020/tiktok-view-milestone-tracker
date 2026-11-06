@@ -359,7 +359,7 @@ function TotalViewsSummary({
             
             Today
           </p>
-          <p className="mt-1 font-mono text-[44px] leading-tight font-extrabold silver-text text-success">
+          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
             {isLoading ? "—" : `+${full(summary.todayGain)}`}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -373,7 +373,7 @@ function TotalViewsSummary({
             
             Rolling 24h
           </p>
-          <p className="mt-1 font-mono text-[44px] leading-tight font-extrabold silver-text text-success">
+          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
             {isLoading ? "—" : `+${full(summary.h24Gain)}`}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">

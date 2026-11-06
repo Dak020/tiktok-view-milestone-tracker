@@ -32,5 +32,5 @@ export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: keyof
   return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name]}</svg>;
 }
 
-const named = (name: keyof typeof paths) => function NamedIcon(props: SVGProps<SVGSVGElement>) { return <Icon name={name} {...props} />; };
+const named = (name: keyof typeof paths) => function NamedIcon(props: SVGProps<SVGSVGElement>) { return <Icon {...props} name={name} />; };
 export const Activity = named("pulse"), Bell = named("bell"), BellRing = named("bell"), Settings = named("settings"), ChevronLeft = named("back"), Eye = named("eye"), Heart = named("heart"), MessageCircle = named("comment"), Share2 = named("share"), RefreshCw = named("refresh"), Loader2 = named("refresh"), Pause = named("pause"), Trash2 = named("trash"), Plus = named("plus"), ExternalLink = named("external"), Pencil = named("edit"), Circle = named("empty"), CheckCircle2 = named("check"), Play = named("play"), X = named("close"), ChevronUp = named("up"), ChevronDown = named("down"), TrendingUp = named("trend"), Calendar = named("calendar"), Clock = named("clock"), Sparkles = named("pulse"), AlertTriangle = named("alert"), LogOut = named("logout");
