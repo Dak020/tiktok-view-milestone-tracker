@@ -56,8 +56,13 @@ export const checkAllPosts = createServerFn({ method: "POST" })
     const { checkPost } = await import("./tracker.server");
 
     let checked = 0;
-    for (const p of posts ?? []) {
-      await checkPost(supabaseAdmin, p);
+    const postList = posts ?? [];
+    for (let i = 0; i < postList.length; i++) {
+      if (i > 0) {
+        // Respect TikWM's 1-request-per-second limit
+        await new Promise((r) => setTimeout(r, 1250));
+      }
+      await checkPost(supabaseAdmin, postList[i]);
       checked++;
     }
     return { ok: true, checked };
