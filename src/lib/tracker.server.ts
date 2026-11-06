@@ -24,7 +24,8 @@ export class ScrapeError extends Error {
  * Strategy 1: Dedicated RapidAPI (if TIKTOK_SCRAPER_API_KEY is configured)
  */
 async function fetchViaRapidApi(url: string, key: string): Promise<TikTokStats> {
-  const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/?hd=0&url=${encodeURIComponent(url)}`, {
+  const cleanUrl = url.trim().split("?")[0];
+  const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/?hd=0&url=${encodeURIComponent(cleanUrl)}`, {
     headers: {
       "x-rapidapi-key": key,
       "x-rapidapi-host": "tiktok-scraper7.p.rapidapi.com",
@@ -51,80 +52,54 @@ async function fetchViaRapidApi(url: string, key: string): Promise<TikTokStats> 
 }
 
 /**
- * Strategy 2: Direct public TikTok page parsing (No third-party scraper needed)
- */
-async function fetchViaDirectTikTok(url: string): Promise<TikTokStats> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
-    redirect: "follow",
-  });
-
-  if (!res.ok) throw new Error(`TikTok direct fetch HTTP ${res.status}`);
-  const html = await res.text();
-
-  const scriptRegex = /<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application\/json">(.*?)<\/script>/s;
-  const match = html.match(scriptRegex);
-  if (!match || !match[1]) {
-    throw new Error("Unable to locate TikTok rehydration payload");
-  }
-
-  const json = JSON.parse(match[1]);
-  const defaultScope = json?.["__DEFAULT_SCOPE__"];
-  const itemInfo =
-    defaultScope?.["webapp.video-detail"]?.itemInfo?.itemStruct ??
-    defaultScope?.["seo.app"]?.metaParams?.itemInfo?.itemStruct;
-
-  if (!itemInfo) {
-    throw new Error("Video itemStruct missing from TikTok page");
-  }
-
-  const stats = itemInfo.stats || itemInfo.statsV2 || {};
-  const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v) || null);
-  const views = num(stats.playCount);
-  if (views == null) throw new Error("playCount missing from direct TikTok stats");
-
-  return {
-    views,
-    likes: num(stats.diggCount),
-    comments: num(stats.commentCount),
-    shares: num(stats.shareCount),
-    caption: itemInfo.desc || null,
-    thumbnail: itemInfo.video?.cover || itemInfo.video?.originCover || null,
-  };
-}
-
-/**
- * Strategy 3: TikWM public API
+ * Strategy 2: TikWM public API with automatic 1.25s backoff on 1-req/sec rate limits
  */
 async function fetchViaTikWm(url: string): Promise<TikTokStats> {
-  const res = await fetch(`https://www.tikwm.com/api/?hd=0&url=${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error(`TikWM HTTP ${res.status}`);
-  const json = await res.json();
-  if (!json || json.code !== 0 || !json.data) {
-    throw new Error(json?.msg ?? "TikWM error");
-  }
-  const d = json.data;
-  const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v) || null);
-  const views = num(d["play_count"]);
-  if (views == null) throw new Error("No play_count in TikWM payload");
+  const cleanUrl = url.trim().split("?")[0];
+  const hosts = ["https://www.tikwm.com", "https://tikwm.com"];
+  let lastError = "TikWM error";
 
-  return {
-    views,
-    likes: num(d["digg_count"]),
-    comments: num(d["comment_count"]),
-    shares: num(d["share_count"]),
-    caption: (d["title"] as string) || null,
-    thumbnail: (d["cover"] as string) || (d["origin_cover"] as string) || null,
-  };
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const host = hosts[(attempt - 1) % hosts.length];
+    try {
+      const res = await fetch(`${host}/api/?hd=0&url=${encodeURIComponent(cleanUrl)}`);
+      if (!res.ok) throw new Error(`TikWM HTTP ${res.status}`);
+      const json = await res.json();
+
+      if (json && json.code === 0 && json.data) {
+        const d = json.data;
+        const num = (v: unknown) => (typeof v === "number" ? v : v == null ? null : Number(v) || null);
+        const views = num(d["play_count"]);
+        if (views != null) {
+          return {
+            views,
+            likes: num(d["digg_count"]),
+            comments: num(d["comment_count"]),
+            shares: num(d["share_count"]),
+            caption: (d["title"] as string) || null,
+            thumbnail: (d["cover"] as string) || (d["origin_cover"] as string) || null,
+          };
+        }
+      }
+
+      lastError = json?.msg || "Invalid response";
+      // If we hit the 1 req/sec limit, wait 1.25s and retry
+      if (typeof lastError === "string" && lastError.includes("1 request/second")) {
+        await new Promise((r) => setTimeout(r, 1250));
+        continue;
+      }
+      break;
+    } catch (e) {
+      lastError = (e as Error).message;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  throw new Error(`TikWM: ${lastError}`);
 }
 
 /**
- * Multi-provider pipeline: tries configured key, direct page fetch, and TikWM
+ * Multi-provider pipeline
  */
 export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
   const key = process.env["TIKTOK_SCRAPER_API_KEY"];
@@ -139,20 +114,14 @@ export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
   }
 
   try {
-    return await fetchViaDirectTikTok(url);
-  } catch (err) {
-    errors.push(`Direct TikTok: ${(err as Error).message}`);
-  }
-
-  try {
     return await fetchViaTikWm(url);
   } catch (err) {
-    errors.push(`TikWM: ${(err as Error).message}`);
+    errors.push((err as Error).message);
   }
 
   const combined = errors.join(" | ");
   const isPermanent = /private|not exist|deleted|removed|unavailable|invalid url/i.test(combined);
-  throw new ScrapeError(`All scraper providers failed: ${combined}`, isPermanent);
+  throw new ScrapeError(`Scraper failed: ${combined}`, isPermanent);
 }
 
 export async function sendNtfy(topic: string, title: string, message: string, clickUrl?: string) {
