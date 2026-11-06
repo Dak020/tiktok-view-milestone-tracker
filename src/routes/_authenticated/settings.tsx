@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { BellRing, LogOut } from "@/components/tracker/Icon";
+import { BellRing, LogOut, Eye } from "@/components/tracker/Icon";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTestNotification } from "@/lib/tracker.functions";
@@ -27,6 +27,7 @@ function SettingsPage() {
   const navigate = useNavigate();
   const test = useServerFn(sendTestNotification);
   const [topic, setTopic] = useState("");
+  const [showTopic, setShowTopic] = useState(false);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -75,7 +76,32 @@ function SettingsPage() {
           <p className="text-sm text-muted-foreground">
             Install the ntfy app, subscribe to a topic name only you know, and enter that same name here.
           </p>
-          <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="my-secret-topic" className="h-12 font-mono text-base" />
+          <div className="relative">
+            <Input
+              type={showTopic ? "text" : "password"}
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="my-secret-topic"
+              className="h-12 font-mono text-base pr-12 tracking-wider"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={() => setShowTopic((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+              aria-label={showTopic ? "Hide topic" : "Show topic"}
+            >
+              {showTopic ? (
+                <svg className="h-4 w-4" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M17.94 17.94A10.07 10.07 0 0112 19c-7 0-11-7-11-7a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 5c7 0 11 7 11 7a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Button className="h-12" onClick={() => save().catch(() => {})}>Save</Button>
             <Button variant="secondary" className="h-12" onClick={sendTest} disabled={busy}>
