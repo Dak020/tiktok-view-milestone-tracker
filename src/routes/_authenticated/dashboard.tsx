@@ -89,11 +89,11 @@ function DashboardPage() {
     };
   }, [queryClient]);
 
-  // 2. Client-side fallback check: If any active post hasn't been checked in >= 20 mins, check them automatically
+  // 2. Client-side fallback check: If any active post hasn't been checked in >= 30 mins, check them automatically
   useEffect(() => {
     if (!data?.posts || autoCheckedRef.current || checkingAll) return;
     const now = Date.now();
-    const staleThreshold = 20 * 60 * 1000; // 20 minutes
+    const staleThreshold = 30 * 60 * 1000; // 30 minutes
     const hasStale = data.posts.some((p) => {
       if (p.status !== "active") return false;
       if (!p.last_checked_at) return true;
