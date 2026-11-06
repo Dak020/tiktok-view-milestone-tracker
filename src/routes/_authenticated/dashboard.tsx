@@ -310,7 +310,7 @@ function DashboardPage() {
                   </div>
 
                   <div className="flex flex-col items-end gap-1">
-                    <Sparkline data={spark} />
+                    <Sparkline values={spark} />
                     <span className="text-[11px] text-muted-foreground">
                       {p.last_checked_at ? timeAgo(p.last_checked_at) : "pending"}
                     </span>
