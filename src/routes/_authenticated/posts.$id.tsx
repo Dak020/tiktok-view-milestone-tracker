@@ -8,7 +8,6 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { MilestonePicker } from "@/components/tracker/MilestonePicker";
 import { postQuery } from "@/components/tracker/data";
-import { StatusBadge } from "./dashboard";
 import { checkNow } from "@/lib/tracker.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -230,4 +229,10 @@ function EditMilestones({
       </DialogContent>
     </Dialog>
   );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "active") return null;
+  const tone = status === "paused" ? "text-muted-foreground" : "text-destructive";
+  return <span className={`inner-tile shrink-0 !px-2 !py-0.5 text-[11px] capitalize ${tone}`}>{status}</span>;
 }

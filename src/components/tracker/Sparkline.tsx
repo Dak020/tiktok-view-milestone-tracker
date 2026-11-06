@@ -1,7 +1,8 @@
 import { useId } from "react";
 
-export function Sparkline({ values, className }: { values: number[]; className?: string }) {
+export function Sparkline({ values: v, data, className }: { values?: number[]; data?: number[]; className?: string }) {
   const gradientId = useId();
+  const values = v ?? data ?? [];
   if (values.length < 2) {
     return <div className={`h-8 text-[11px] text-muted-foreground ${className ?? ""}`}>collecting data…</div>;
   }

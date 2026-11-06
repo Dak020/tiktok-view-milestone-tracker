@@ -24,7 +24,7 @@ export class ScrapeError extends Error {
  * Strategy 1: Dedicated RapidAPI (if TIKTOK_SCRAPER_API_KEY is configured)
  */
 async function fetchViaRapidApi(url: string, key: string): Promise<TikTokStats> {
-  const cleanUrl = url.trim().split("?")[0];
+  const cleanUrl = url.trim().split("?")[0] ?? url.trim();
   const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/?hd=0&url=${encodeURIComponent(cleanUrl)}`, {
     headers: {
       "x-rapidapi-key": key,
@@ -55,7 +55,7 @@ async function fetchViaRapidApi(url: string, key: string): Promise<TikTokStats> 
  * Strategy 2: TikWM public API with automatic 1.25s backoff on 1-req/sec rate limits
  */
 async function fetchViaTikWm(url: string): Promise<TikTokStats> {
-  const cleanUrl = url.trim().split("?")[0];
+  const cleanUrl = url.trim().split("?")[0] ?? url.trim();
   const hosts = ["https://www.tikwm.com", "https://tikwm.com"];
   let lastError = "TikWM error";
 
