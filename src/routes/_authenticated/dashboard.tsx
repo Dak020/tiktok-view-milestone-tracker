@@ -40,12 +40,12 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       { property: "og:description", content: "Your tracked TikTok posts, views and milestone progress." },
     ],
   }),
-  component: Dashboard,
+  component: DashboardPage,
 });
 
 type Sort = "newest" | "views" | "closest";
 
-function Dashboard() {
+function DashboardPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery(postsQuery);
   const [sort, setSort] = useState<Sort>("newest");
@@ -107,7 +107,7 @@ function Dashboard() {
     }
   }
 
-  // Calculate cards and aggregate summary metrics (Option C: Today + 24h + Total Views)
+  // Calculate cards and aggregate summary metrics (Option C: Today in US ET + 24h + Total Views)
   const { cards, summary } = useMemo(() => {
     if (!data) {
       return {
@@ -116,9 +116,24 @@ function Dashboard() {
       };
     }
 
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const msSinceMidnight = Date.now() - startOfToday.getTime();
+    // US Eastern midnight (America/New_York) — 12:00 AM ET = 5:00 AM WAT / UTC+1
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const getPart = (t: string) => parts.find((p) => p.type === t)?.value;
+    const h = Number(getPart("hour") ?? 0);
+    const min = Number(getPart("minute") ?? 0);
+    const s = Number(getPart("second") ?? 0);
+    const msSinceMidnight = (h * 3600 + min * 60 + s) * 1000;
 
     let totalViews = 0;
     let todayGain = 0;
@@ -172,8 +187,8 @@ function Dashboard() {
   return (
     <div className="min-h-screen pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
-        {/* TOTAL VIEWS SUMMARY TABLE (PLACED ABOVE ADD POST) */}
+      <main className="mx-auto max-w-2xl space-y-5 px-4 pt-4">
+        {/* Total Views Summary Card — Placed ABOVE Add Post */}
         <TotalViewsSummary
           summary={summary}
           cards={cards}
@@ -182,120 +197,178 @@ function Dashboard() {
           onCheckAll={handleCheckAll}
         />
 
-        {/* ADD POST BOX */}
-        <AddPostBox />
+        {/* Add Post Form */}
+        <AddPostBox onAdded={() => queryClient.invalidateQueries({ queryKey: ["posts"] })} />
 
-        {/* TRACKED POSTS LIST */}
-        <section>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-bold sm:text-lg">Tracked posts</h2>
-            <div className="flex shrink-0 rounded-full border bg-muted p-1 text-sm">
-              {(["newest", "views", "closest"] as Sort[]).map((s) => (
-                <Button
-                  variant="ghost"
-                  key={s}
-                  aria-pressed={sort === s}
-                  onClick={() => setSort(s)}
-                  className={`h-10 rounded-full px-2.5 text-xs font-semibold transition ${
-                    sort === s ? "silver-chip text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {s === "newest" ? "Newest" : s === "views" ? "Views" : "Closest"}
-                </Button>
-              ))}
-            </div>
+        {/* Posts List Header & Sort Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+          <p className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+            Tracked posts {cards.length > 0 && <span className="text-foreground">({cards.length})</span>}
+          </p>
+          <div className="flex items-center gap-1 text-xs">
+            {(["newest", "views", "closest"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSort(s)}
+                className={`rounded-full px-3 py-1 font-medium transition-all ${
+                  sort === s
+                    ? "silver-chip shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {s === "newest" ? "Newest" : s === "views" ? "Most views" : "Closest"}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {isLoading && <p className="py-10 text-center text-muted-foreground">Loading…</p>}
+        {/* Post Cards */}
+        {isLoading && (
+          <div className="space-y-3">
+            {[0, 1].map((i) => (
+              <div key={i} className="h-40 animate-pulse rounded-[20px] bg-secondary/30" />
+            ))}
+          </div>
+        )}
 
-          {!isLoading && cards.length === 0 && (
-            <p className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
-              Paste a TikTok link above to start tracking.
-            </p>
-          )}
+        {!isLoading && cards.length === 0 && (
+          <div className="rounded-[20px] border border-dashed border-border/60 p-8 text-center text-muted-foreground">
+            No posts tracked yet. Paste a TikTok link above to get started.
+          </div>
+        )}
 
-          <ul className="space-y-3">
-            {cards.map(({ p, next, progress, spark, h1, h24 }) => (
-              <li key={p.id}>
-                <Link
-                  to="/posts/$id"
-                  params={{ id: p.id }}
-                  className="block surface-card transition active:scale-[0.99] hover:border-primary/40"
-                >
-                  <div className="flex gap-3">
-                    <div className="grid h-[100px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[14px] border bg-secondary">
-                      {!p.thumbnail_url && <Sparkles className="h-6 w-6 text-muted-foreground" />}
-                      {p.thumbnail_url && (
-                        <img
-                          src={p.thumbnail_url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          referrerPolicy="no-referrer"
-                          loading="lazy"
-                        />
+        <div className="space-y-3">
+          {cards.map(({ p, next, progress, spark, h1, h24, today }) => {
+            const isPaused = p.status === "paused";
+            const isFailed = p.status === "failed" || p.status === "unavailable";
+
+            return (
+              <Link
+                key={p.id}
+                to="/posts/$id"
+                params={{ id: p.id }}
+                className="group block surface-card transition-all hover:border-foreground/25 active:scale-[0.995]"
+              >
+                <div className="flex items-start gap-3">
+                  {p.thumbnail_url ? (
+                    <img
+                      src={p.thumbnail_url}
+                      alt=""
+                      className="h-16 w-12 flex-shrink-0 rounded-[10px] object-cover ring-1 ring-border/50"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-12 flex-shrink-0 items-center justify-center rounded-[10px] bg-secondary/50 text-muted-foreground">
+                      <Sparkles className="h-5 w-5 text-muted-foreground/60" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate font-semibold text-foreground group-hover:text-silver-300">
+                        {p.nickname || (p.caption ? p.caption.slice(0, 36) : "Untitled post")}
+                      </h3>
+                      {isPaused && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-secondary/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <Pause className="h-2.5 w-2.5" /> Paused
+                        </span>
+                      )}
+                      {isFailed && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Error
+                        </span>
                       )}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 truncate font-semibold">{p.nickname || p.caption || "Untitled post"}</p>
-                        <StatusBadge status={p.status} />
-                      </div>
-                      <p className="mt-0.5 flex items-center gap-1.5 font-mono text-3xl font-bold silver-text">
-                        <Eye className="h-5 w-5 text-muted-foreground" />
-                        {full(p.current_views)}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Heart className="h-3.5 w-3.5" />
+
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="font-mono text-2xl font-extrabold tracking-tight silver-text">
+                        {compact(p.current_views)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">views</span>
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      {p.likes !== null && (
+                        <span className="inline-flex items-center gap-1">
+                          <Heart className="h-3 w-3" />
                           {compact(p.likes)}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <MessageCircle className="h-3.5 w-3.5" />
+                      )}
+                      {p.comments !== null && (
+                        <span className="inline-flex items-center gap-1">
+                          <MessageCircle className="h-3 w-3" />
                           {compact(p.comments)}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Share2 className="h-3.5 w-3.5" />
+                      )}
+                      {p.shares !== null && (
+                        <span className="inline-flex items-center gap-1">
+                          <Share2 className="h-3 w-3" />
                           {compact(p.shares)}
                         </span>
-                      </div>
+                      )}
                     </div>
                   </div>
-                  <div className="mt-3">
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        {next ? (
-                          <>
-                            Next: <b className="font-mono text-foreground">{compact(next.target_views)}</b>
-                          </>
-                        ) : (
-                          "All milestones hit 🎉"
-                        )}
+
+                  <div className="flex flex-col items-end gap-1">
+                    <Sparkline data={spark} />
+                    <span className="text-[11px] text-muted-foreground">
+                      {p.last_checked_at ? timeAgo(p.last_checked_at) : "pending"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress toward next milestone */}
+                <div className="mt-3.5 space-y-1.5 border-t border-border/40 pt-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {next ? (
+                        <>
+                          Next milestone: <b className="text-foreground">{compact(next.target_views)}</b>
+                        </>
+                      ) : (
+                        <span className="text-success font-medium">All milestones hit</span>
+                      )}
+                    </span>
+                    {next && <span className="font-mono text-muted-foreground">{Math.round(progress)}%</span>}
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+                  </div>
+                </div>
+
+                {/* Growth Velocity Badges */}
+                <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    {h1 !== null && (
+                      <span className="inline-flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3 text-success" />
+                        <span className="text-success font-medium">+{compact(h1)}</span> 1h
                       </span>
-                      <span className="font-mono">{Math.round(progress * 100)}%</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full progress-track">
-                      <div className="h-full rounded-full progress-fill transition-all" style={{ width: `${progress * 100}%` }} />
-                    </div>
+                    )}
+                    {today !== null && (
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-foreground font-medium">+{compact(today)}</span> today
+                      </span>
+                    )}
+                    {h24 !== null && (
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground font-medium">+{compact(h24)}</span> 24h
+                      </span>
+                    )}
                   </div>
-                  <div className="mt-3 flex items-end gap-3">
-                    <Sparkline values={spark} className="flex-1" />
-                    <div className="shrink-0 text-right text-xs">
-                      <p className="flex items-center justify-end gap-1 font-mono text-success font-medium">
-                        <TrendingUp className="h-3.5 w-3.5" />+{compact(h1 ?? 0)}/h · +{compact(h24 ?? 0)}/24h
-                      </p>
-                      <p className="text-muted-foreground">checked {timeAgo(p.last_checked_at)}</p>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </main>
     </div>
   );
 }
 
+// Total Views Summary Component (Option C: Today in US ET + Rolling 24h + Total Views)
 function TotalViewsSummary({
   summary,
   cards,
@@ -312,11 +385,7 @@ function TotalViewsSummary({
     totalShares: number;
     activeCount: number;
   };
-  cards: Array<{
-    p: { id: string; nickname: string | null; caption: string | null; current_views: number };
-    today: number | null;
-    h24: number | null;
-  }>;
+  cards: any[];
   isLoading: boolean;
   checkingAll: boolean;
   onCheckAll: () => void;
@@ -325,53 +394,54 @@ function TotalViewsSummary({
 
   return (
     <section className="surface-card">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          
-          <h2 className="metric-label">Total Views Overview</h2>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <span className="metric-label">Total Tracked Views</span>
+          <div className="mt-1 flex items-baseline gap-2">
+            <h1 className="font-mono text-4xl leading-none font-extrabold tracking-tight silver-text">
+              {isLoading ? "—" : full(summary.totalViews)}
+            </h1>
+            <span className="text-xs text-muted-foreground">({compact(summary.totalViews)})</span>
+          </div>
         </div>
+
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
+          className="h-9 gap-1.5 px-3 text-xs"
           onClick={onCheckAll}
-          disabled={checkingAll || isLoading}
-          className="h-10 gap-1.5 rounded-full px-3 text-xs"
+          disabled={checkingAll || isLoading || summary.activeCount === 0}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${checkingAll ? "animate-spin text-primary" : ""}`} />
-          {checkingAll ? "Checking all…" : "Check all"}
+          {checkingAll ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-3.5 w-3.5" /> Check all now
+            </>
+          )}
         </Button>
       </div>
 
-      {/* Primary KPI Grid (Option C: Total Views, Today, Past 24h) */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {/* Total Views */}
-        <div className="col-span-2 pb-1">
-          <p className="mt-1 font-mono text-[44px] leading-tight font-extrabold silver-text">
-            {isLoading ? "—" : full(summary.totalViews)}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Across {summary.activeCount} active post{summary.activeCount === 1 ? "" : "s"}
-          </p>
-        </div>
-
-        {/* Today's Gain (Since Midnight) */}
+      {/* Metrics Row: Today's Gain vs Rolling 24h Gain */}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {/* Today's Gain (US Eastern Midnight Anchor) */}
         <div className="inner-tile">
           <p className="metric-label flex items-center gap-1.5">
-            
-            Today
+            Today (US)
           </p>
           <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
             {isLoading ? "—" : `+${full(summary.todayGain)}`}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {isLoading ? "—" : `+${compact(summary.todayGain)} views since midnight`}
+            {isLoading ? "—" : `+${compact(summary.todayGain)} · resets 12 AM ET / 5 AM local`}
           </p>
         </div>
 
         {/* Rolling 24 Hours Gain */}
         <div className="inner-tile">
           <p className="metric-label flex items-center gap-1.5">
-            
             Rolling 24h
           </p>
           <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
@@ -384,7 +454,7 @@ function TotalViewsSummary({
       </div>
 
       {/* Aggregate Engagements */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5 text-xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Heart className="h-3.5 w-3.5 text-muted-foreground" />
@@ -401,39 +471,42 @@ function TotalViewsSummary({
         </div>
 
         {cards.length > 0 && (
-          <Button variant="link"
-            onClick={() => setShowTable(!showTable)}
-            className="h-11 px-0 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          <button
+            type="button"
+            onClick={() => setShowTable((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
           >
-            {showTable ? "Hide breakdown table" : "Show per-post table"}
-            {showTable ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </Button>
+            {showTable ? "Hide post breakdown" : "View post breakdown"}
+            {showTable ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
         )}
       </div>
 
-      {/* Per-Post Breakdown Table Drawer */}
+      {/* Collapsible Breakdown Table */}
       {showTable && cards.length > 0 && (
-        <div className="mt-3 overflow-x-auto rounded-lg border bg-background/50">
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border/40 bg-secondary/20 p-2">
           <table className="w-full text-left text-xs">
-            <thead className="border-b bg-muted/50 font-semibold text-muted-foreground">
-              <tr>
-                <th className="p-2.5">Post</th>
-                <th className="p-2.5 text-right">Total Views</th>
-                <th className="p-2.5 text-right">Today</th>
-                <th className="p-2.5 text-right">24h Gain</th>
+            <thead>
+              <tr className="border-b border-border/40 text-[10px] uppercase text-muted-foreground">
+                <th className="pb-1.5 pl-1">Post</th>
+                <th className="pb-1.5 text-right">Current</th>
+                <th className="pb-1.5 text-right">Today (US)</th>
+                <th className="pb-1.5 text-right">24h</th>
               </tr>
             </thead>
-            <tbody className="divide-y font-mono">
+            <tbody className="divide-y divide-border/20 font-mono">
               {cards.map(({ p, today, h24 }) => (
-                <tr key={p.id} className="hover:bg-muted/30">
-                  <td className="p-2.5 font-sans font-medium">
-                    <Link to="/posts/$id" params={{ id: p.id }} className="truncate hover:underline">
-                      {p.nickname || p.caption || "Untitled"}
-                    </Link>
+                <tr key={p.id} className="hover:bg-secondary/40">
+                  <td className="py-1.5 pl-1 font-sans font-medium text-foreground truncate max-w-[140px]">
+                    {p.nickname || p.caption || "Untitled"}
                   </td>
-                  <td className="p-2.5 text-right font-bold">{full(p.current_views)}</td>
-                  <td className="p-2.5 text-right text-success">+{compact(today ?? 0)}</td>
-                  <td className="p-2.5 text-right text-success">+{compact(h24 ?? 0)}</td>
+                  <td className="py-1.5 text-right text-muted-foreground">{compact(p.current_views)}</td>
+                  <td className="py-1.5 text-right text-success font-semibold">
+                    {today !== null ? `+${compact(today)}` : "—"}
+                  </td>
+                  <td className="py-1.5 text-right text-muted-foreground">
+                    {h24 !== null ? `+${compact(h24)}` : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -444,79 +517,83 @@ function TotalViewsSummary({
   );
 }
 
-export function StatusBadge({ status }: { status: string }) {
-  if (status === "active") return null;
-  const paused = status === "paused";
-  return (
-    <span
-      className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-        paused ? "bg-muted text-muted-foreground" : "bg-destructive/20 text-destructive"
-      }`}
-    >
-      {paused ? <Pause className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-      {paused ? "Paused" : status === "unavailable" ? "Unavailable" : "Failing"}
-    </span>
-  );
-}
-
-function AddPostBox() {
-  const qc = useQueryClient();
+// Add Post Box Component
+function AddPostBox({ onAdded }: { onAdded: () => void }) {
   const add = useServerFn(addPost);
   const [url, setUrl] = useState("");
   const [nickname, setNickname] = useState("");
-  const [milestones, setMilestones] = useState<number[]>([100_000]);
-  const [busy, setBusy] = useState(false);
+  const [milestones, setMilestones] = useState<number[]>([10_000, 50_000, 100_000]);
+  const [submitting, setSubmitting] = useState(false);
 
-  async function submit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isTikTokUrl(url)) {
-      toast.error("That doesn't look like a TikTok link");
+    const cleanUrl = url.trim();
+
+    if (!cleanUrl) {
+      toast.error("Please paste a TikTok video link");
+      return;
+    }
+    if (!isTikTokUrl(cleanUrl)) {
+      toast.error("That doesn't look like a valid TikTok link (use tiktok.com/...)");
       return;
     }
     if (milestones.length === 0) {
-      toast.error("Pick at least one milestone");
+      toast.error("Select at least one milestone to track");
       return;
     }
-    setBusy(true);
+
+    setSubmitting(true);
     try {
-      const r = await add({ data: { url: url.trim(), nickname: nickname || undefined, milestones } });
-      if (r.result.ok) toast.success(`Tracking! ${full(r.result.views)} views right now.`);
-      else toast.warning(`Added, but the first check failed: ${r.result.error}`);
+      await add({
+        data: {
+          url: cleanUrl,
+          nickname: nickname.trim() || undefined,
+          milestones,
+        },
+      });
+      toast.success("Post added! Checking initial views...");
       setUrl("");
       setNickname("");
-      qc.invalidateQueries();
+      onAdded();
     } catch (err) {
-      toast.error((err as Error).message);
+      toast.error((err as Error).message || "Failed to add post");
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 surface-card shadow-sm">
-      <h2 className="text-lg font-bold">Add post</h2>
+    <form onSubmit={handleSubmit} className="surface-card space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold tracking-tight text-foreground">Add TikTok post</h2>
+        <span className="text-[11px] text-muted-foreground">Auto-checks every 20m</span>
+      </div>
+
       <Input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        placeholder="Paste TikTok link"
-        inputMode="url"
-        className="h-12 text-base"
+        placeholder="https://www.tiktok.com/@creator/video/..."
+        className="h-12 text-sm"
+        disabled={submitting}
       />
+
       <Input
         value={nickname}
         onChange={(e) => setNickname(e.target.value)}
-        placeholder="Nickname (optional)"
-        maxLength={60}
-        className="h-12 text-base"
+        placeholder="Nickname (optional, e.g. 'Dance Reel')"
+        className="h-11 text-sm"
+        disabled={submitting}
       />
-      <div>
-        <p className="mb-2 metric-label">Alert me at</p>
+
+      <div className="space-y-1.5">
+        <label className="metric-label">Milestone targets</label>
         <MilestonePicker value={milestones} onChange={setMilestones} />
       </div>
-      <Button type="submit" disabled={busy} className="h-[52px] w-full text-[15px] font-bold">
-        {busy ? (
+
+      <Button type="submit" disabled={submitting} className="w-full text-base font-semibold">
+        {submitting ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" /> Checking post…
+            <Loader2 className="h-4 w-4 animate-spin" /> Adding & fetching stats...
           </>
         ) : (
           "Start tracking"
