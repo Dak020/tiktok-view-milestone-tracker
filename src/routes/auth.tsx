@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Activity } from "lucide-react";
+import { Activity } from "@/components/tracker/Icon";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Sign in — ViewPulse" },
       { name: "description", content: "Sign in to track your TikTok post views privately." },
       { property: "og:title", content: "Sign in — ViewPulse" },
@@ -59,7 +61,7 @@ function AuthPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-5">
       <div className="mb-8 flex items-center gap-2">
-        <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground">
+        <div className="grid h-11 w-11 place-items-center rounded-[14px] logo-mark">
           <Activity className="h-6 w-6" />
         </div>
         <h1 className="text-2xl font-bold">ViewPulse</h1>
@@ -74,12 +76,12 @@ function AuthPage() {
           {busy ? "…" : mode === "in" ? "Sign in" : "Create account"}
         </Button>
       </form>
-      <button
+      <Button variant="link"
         className="mt-5 py-3 text-sm text-muted-foreground underline-offset-4 hover:underline"
         onClick={() => setMode(mode === "in" ? "up" : "in")}
       >
         {mode === "in" ? "No account? Sign up" : "Already have an account? Sign in"}
-      </button>
+      </Button>
     </main>
   );
 }

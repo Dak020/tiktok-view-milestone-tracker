@@ -18,7 +18,7 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
-} from "lucide-react";
+} from "@/components/tracker/Icon";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { Sparkline } from "@/components/tracker/Sparkline";
 import { MilestonePicker } from "@/components/tracker/MilestonePicker";
@@ -32,6 +32,8 @@ import { compact, full, gainedSince, isTikTokUrl, nextMilestone, progressToNext,
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard — ViewPulse" },
       { name: "description", content: "Your tracked TikTok posts, views and milestone progress." },
       { property: "og:title", content: "Dashboard — ViewPulse" },
@@ -170,7 +172,7 @@ function Dashboard() {
   return (
     <div className="min-h-screen pb-16">
       <AppHeader />
-      <main className="mx-auto max-w-2xl space-y-6 px-4 pt-4">
+      <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
         {/* TOTAL VIEWS SUMMARY TABLE (PLACED ABOVE ADD POST) */}
         <TotalViewsSummary
           summary={summary}
@@ -185,19 +187,21 @@ function Dashboard() {
 
         {/* TRACKED POSTS LIST */}
         <section>
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold">Tracked posts</h2>
-            <div className="flex rounded-full bg-secondary p-1 text-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-bold sm:text-lg">Tracked posts</h2>
+            <div className="flex shrink-0 rounded-full border bg-muted p-1 text-sm">
               {(["newest", "views", "closest"] as Sort[]).map((s) => (
-                <button
+                <Button
+                  variant="ghost"
                   key={s}
+                  aria-pressed={sort === s}
                   onClick={() => setSort(s)}
-                  className={`h-9 rounded-full px-3 font-medium transition ${
-                    sort === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  className={`h-10 rounded-full px-2.5 text-xs font-semibold transition ${
+                    sort === s ? "silver-chip text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {s === "newest" ? "Newest" : s === "views" ? "Views" : "Closest"}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -216,10 +220,11 @@ function Dashboard() {
                 <Link
                   to="/posts/$id"
                   params={{ id: p.id }}
-                  className="block rounded-2xl border bg-card p-4 transition active:scale-[0.99] hover:border-primary/40"
+                  className="block surface-card transition active:scale-[0.99] hover:border-primary/40"
                 >
                   <div className="flex gap-3">
-                    <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
+                    <div className="grid h-[100px] w-[74px] shrink-0 place-items-center overflow-hidden rounded-[14px] border bg-secondary">
+                      {!p.thumbnail_url && <Sparkles className="h-6 w-6 text-muted-foreground" />}
                       {p.thumbnail_url && (
                         <img
                           src={p.thumbnail_url}
@@ -235,7 +240,7 @@ function Dashboard() {
                         <p className="min-w-0 flex-1 truncate font-semibold">{p.nickname || p.caption || "Untitled post"}</p>
                         <StatusBadge status={p.status} />
                       </div>
-                      <p className="mt-0.5 flex items-center gap-1.5 font-mono text-2xl font-bold">
+                      <p className="mt-0.5 flex items-center gap-1.5 font-mono text-3xl font-bold silver-text">
                         <Eye className="h-5 w-5 text-muted-foreground" />
                         {full(p.current_views)}
                       </p>
@@ -268,8 +273,8 @@ function Dashboard() {
                       </span>
                       <span className="font-mono">{Math.round(progress * 100)}%</span>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress * 100}%` }} />
+                    <div className="h-1.5 overflow-hidden rounded-full progress-track">
+                      <div className="h-full rounded-full progress-fill transition-all" style={{ width: `${progress * 100}%` }} />
                     </div>
                   </div>
                   <div className="mt-3 flex items-end gap-3">
@@ -319,33 +324,29 @@ function TotalViewsSummary({
   const [showTable, setShowTable] = useState(false);
 
   return (
-    <section className="rounded-2xl border bg-card/90 p-4 shadow-sm backdrop-blur">
+    <section className="surface-card">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h2 className="text-base font-bold sm:text-lg">Total Views Overview</h2>
+          
+          <h2 className="metric-label">Total Views Overview</h2>
         </div>
         <Button
           variant="outline"
           size="sm"
           onClick={onCheckAll}
           disabled={checkingAll || isLoading}
-          className="h-8 gap-1.5 rounded-full px-2.5 text-xs font-medium"
+          className="h-10 gap-1.5 rounded-full px-3 text-xs"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${checkingAll ? "animate-spin text-primary" : ""}`} />
-          {checkingAll ? "Checking all…" : "Check all now"}
+          {checkingAll ? "Checking all…" : "Check all"}
         </Button>
       </div>
 
       {/* Primary KPI Grid (Option C: Total Views, Today, Past 24h) */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5">
         {/* Total Views */}
-        <div className="rounded-xl bg-secondary/50 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Eye className="h-3.5 w-3.5" />
-            Total Tracked Views
-          </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight">
+        <div className="col-span-2 pb-1">
+          <p className="mt-1 font-mono text-[44px] leading-tight font-extrabold silver-text">
             {isLoading ? "—" : full(summary.totalViews)}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -354,12 +355,12 @@ function TotalViewsSummary({
         </div>
 
         {/* Today's Gain (Since Midnight) */}
-        <div className="rounded-xl bg-secondary/50 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5 text-primary" />
-            Gained Today (00:00)
+        <div className="inner-tile">
+          <p className="metric-label flex items-center gap-1.5">
+            
+            Today
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-success">
+          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
             {isLoading ? "—" : `+${full(summary.todayGain)}`}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -368,12 +369,12 @@ function TotalViewsSummary({
         </div>
 
         {/* Rolling 24 Hours Gain */}
-        <div className="rounded-xl bg-secondary/50 p-3">
-          <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Clock className="h-3.5 w-3.5 text-primary" />
-            Rolling 24h Gain
+        <div className="inner-tile">
+          <p className="metric-label flex items-center gap-1.5">
+            
+            Rolling 24h
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-success">
+          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
             {isLoading ? "—" : `+${full(summary.h24Gain)}`}
           </p>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -386,27 +387,27 @@ function TotalViewsSummary({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <Heart className="h-3.5 w-3.5 text-rose-500" />
+            <Heart className="h-3.5 w-3.5 text-muted-foreground" />
             <b>{compact(summary.totalLikes)}</b> likes
           </span>
           <span className="flex items-center gap-1">
-            <MessageCircle className="h-3.5 w-3.5 text-blue-500" />
+            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
             <b>{compact(summary.totalComments)}</b> comments
           </span>
           <span className="flex items-center gap-1">
-            <Share2 className="h-3.5 w-3.5 text-emerald-500" />
+            <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
             <b>{compact(summary.totalShares)}</b> shares
           </span>
         </div>
 
         {cards.length > 0 && (
-          <button
+          <Button variant="link"
             onClick={() => setShowTable(!showTable)}
-            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            className="h-11 px-0 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
           >
             {showTable ? "Hide breakdown table" : "Show per-post table"}
             {showTable ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -492,7 +493,7 @@ function AddPostBox() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm">
+    <form onSubmit={submit} className="space-y-4 surface-card shadow-sm">
       <h2 className="text-lg font-bold">Add post</h2>
       <Input
         value={url}
@@ -509,10 +510,10 @@ function AddPostBox() {
         className="h-12 text-base"
       />
       <div>
-        <p className="mb-2 text-sm text-muted-foreground">Alert me at</p>
+        <p className="mb-2 metric-label">Alert me at</p>
         <MilestonePicker value={milestones} onChange={setMilestones} />
       </div>
-      <Button type="submit" disabled={busy} className="h-12 w-full text-base font-semibold">
+      <Button type="submit" disabled={busy} className="h-[52px] w-full text-[15px] font-bold">
         {busy ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" /> Checking post…
