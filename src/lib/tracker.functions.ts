@@ -13,9 +13,23 @@ export const addPost = createServerFn({ method: "POST" })
   .inputValidator((i: z.infer<typeof addSchema>) => addSchema.parse(i))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
+
+    // Expand shortlinks (vt.tiktok.com / vm.tiktok.com) to the full @username URL
+    let targetUrl = data.url.trim();
+    if (/(^|\.)(vt|vm)\.tiktok\.com$/.test(new URL(targetUrl).hostname)) {
+      try {
+        const headRes = await fetch(targetUrl, { method: "HEAD", redirect: "follow" });
+        if (headRes.url && headRes.url.includes("@")) {
+          targetUrl = headRes.url;
+        }
+      } catch {
+        // Fall back to original URL if head request fails
+      }
+    }
+
     const { data: post, error } = await supabase
       .from("posts")
-      .insert({ url: data.url.trim(), nickname: data.nickname?.trim() || null, user_id: userId })
+      .insert({ url: targetUrl, nickname: data.nickname?.trim() || null, user_id: userId })
       .select()
       .single();
     if (error) throw new Error(error.message);
@@ -48,37 +62,55 @@ export const checkAllPosts = createServerFn({ method: "POST" })
     const { data: posts, error } = await context.supabase
       .from("posts")
       .select("*")
-      .eq("user_id", context.userId)
       .eq("status", "active");
     if (error) throw new Error(error.message);
+    if (!posts || posts.length === 0) return { checked: 0 };
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { checkPost } = await import("./tracker.server");
 
-    let checked = 0;
-    const postList = posts ?? [];
-    for (let i = 0; i < postList.length; i++) {
-      if (i > 0) {
-        // Respect TikWM's 1-request-per-second limit
+    for (let i = 0; i < posts.length; i++) {
+      const p = posts[i];
+      if (!p) continue;
+      try {
+        await checkPost(supabaseAdmin, p);
+      } catch (err) {
+        console.error(`checkAllPosts error on post ${p.id}:`, err);
+      }
+      if (i < posts.length - 1) {
         await new Promise((r) => setTimeout(r, 1250));
       }
-      await checkPost(supabaseAdmin, postList[i]!);
-      checked++;
     }
-    return { ok: true, checked };
+
+    return { checked: posts.length };
   });
 
 export const sendTestNotification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { data } = await context.supabase
+    const { supabase, userId } = context;
+    const { data: settings } = await supabase
       .from("user_settings")
       .select("ntfy_topic")
-      .eq("user_id", context.userId)
+      .eq("user_id", userId)
       .maybeSingle();
-    const topic = data?.ntfy_topic || process.env["NTFY_TOPIC"];
-    if (!topic) throw new Error("Set your ntfy topic first");
+
+    if (!settings?.ntfy_topic) {
+      throw new Error("No ntfy topic configured in settings");
+    }
+
     const { sendNtfy } = await import("./tracker.server");
-    await sendNtfy(topic, "Milestone hit 🎉", "Test: your notifications are working!");
-    return { ok: true };
+    await sendNtfy(
+      settings.ntfy_topic,
+      "Test Notification 🎉",
+      "ViewPulse is connected and ready to send milestone alerts.",
+      "https://tiktok.com"
+    );
+
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      message: "Test notification sent successfully to ntfy.",
+    });
+
+    return { success: true };
   });
