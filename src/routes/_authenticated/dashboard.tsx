@@ -4,7 +4,6 @@ import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import {
-  Eye,
   Heart,
   MessageCircle,
   Share2,
@@ -44,6 +43,26 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 type Sort = "newest" | "views" | "closest";
+
+// Extract @username from TikTok URL or fallback to host/path for shortlinks
+function extractAccountHandle(url: string): string {
+  const match = url.match(/@([a-zA-Z0-9_.-]+)/i);
+  if (match && match[1]) {
+    return `@${match[1].toLowerCase()}`;
+  }
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname}`;
+  } catch {
+    return url.split("?")[0] || url;
+  }
+}
+
+export function StatusBadge({ status }: { status: string }) {
+  if (status === "active") return null;
+  const tone = status === "paused" ? "text-muted-foreground" : "text-destructive";
+  return <span className={`inner-tile shrink-0 !px-2 !py-0.5 text-[11px] capitalize ${tone}`}>{status}</span>;
+}
 
 function DashboardPage() {
   const queryClient = useQueryClient();
@@ -112,7 +131,7 @@ function DashboardPage() {
     if (!data) {
       return {
         cards: [],
-        summary: { totalViews: 0, todayGain: 0, h24Gain: 0, totalLikes: 0, totalComments: 0, totalShares: 0, activeCount: 0 },
+        summary: { totalViews: 0, todayGain: 0, h24Gain: 0, activeCount: 0, accountCount: 0 },
       };
     }
 
@@ -138,10 +157,11 @@ function DashboardPage() {
     let totalViews = 0;
     let todayGain = 0;
     let h24Gain = 0;
-    let totalLikes = 0;
-    let totalComments = 0;
-    let totalShares = 0;
     let activeCount = 0;
+
+    const activePosts = data.posts.filter((p) => p.status === "active");
+    const uniqueAccounts = new Set(activePosts.map((p) => extractAccountHandle(p.url)));
+    const accountCount = uniqueAccounts.size;
 
     const list = data.posts.map((p) => {
       const ms = data.milestones.filter((m) => m.post_id === p.id);
@@ -157,9 +177,6 @@ function DashboardPage() {
         totalViews += p.current_views;
         todayGain += today ?? 0;
         h24Gain += h24 ?? 0;
-        totalLikes += p.likes ?? 0;
-        totalComments += p.comments ?? 0;
-        totalShares += p.shares ?? 0;
       }
 
       return {
@@ -180,7 +197,7 @@ function DashboardPage() {
 
     return {
       cards: list,
-      summary: { totalViews, todayGain, h24Gain, totalLikes, totalComments, totalShares, activeCount },
+      summary: { totalViews, todayGain, h24Gain, activeCount, accountCount },
     };
   }, [data, sort]);
 
@@ -380,10 +397,8 @@ function TotalViewsSummary({
     totalViews: number;
     todayGain: number;
     h24Gain: number;
-    totalLikes: number;
-    totalComments: number;
-    totalShares: number;
     activeCount: number;
+    accountCount: number;
   };
   cards: any[];
   isLoading: boolean;
@@ -403,6 +418,9 @@ function TotalViewsSummary({
             </h1>
             <span className="text-xs text-muted-foreground">({compact(summary.totalViews)})</span>
           </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            across {summary.activeCount} active {summary.activeCount === 1 ? "post" : "posts"}
+          </p>
         </div>
 
         <Button
@@ -453,22 +471,11 @@ function TotalViewsSummary({
         </div>
       </div>
 
-      {/* Aggregate Engagements */}
+      {/* Account Tracked Bar (Replacing likes, comments & shares) */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2.5 text-xs text-muted-foreground">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1">
-            <Heart className="h-3.5 w-3.5 text-muted-foreground" />
-            <b>{compact(summary.totalLikes)}</b> likes
-          </span>
-          <span className="flex items-center gap-1">
-            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-            <b>{compact(summary.totalComments)}</b> comments
-          </span>
-          <span className="flex items-center gap-1">
-            <Share2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <b>{compact(summary.totalShares)}</b> shares
-          </span>
-        </div>
+        <span className="font-medium text-foreground">
+          {summary.accountCount} {summary.accountCount === 1 ? "account" : "accounts"} tracked
+        </span>
 
         {cards.length > 0 && (
           <button
