@@ -15,7 +15,13 @@ export type TikTokStats = {
 };
 
 export class ScrapeError extends Error {
-  constructor(message: string, public permanent: boolean) {
+  constructor(
+    message: string,
+    public permanent: boolean,
+    // Temporary provider problem (daily limit, throttling, timeouts, 5xx).
+    // These must never count toward stopping a post.
+    public rateLimited: boolean = false,
+  ) {
     super(message);
   }
 }
@@ -121,11 +127,20 @@ export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
 
   const combined = errors.join(" | ");
   const isPermanent = /private|not exist|deleted|removed|unavailable|invalid url/i.test(combined);
-  throw new ScrapeError(`Scraper failed: ${combined}`, isPermanent);
+  const isRateLimited =
+    !isPermanent &&
+    /limit|429|too many|1 request\/second|timeout|timed out|fetch failed|HTTP 5\d\d/i.test(combined);
+  throw new ScrapeError(`Scraper failed: ${combined}`, isPermanent, isRateLimited);
 }
 
-export async function sendNtfy(topic: string, title: string, message: string, clickUrl?: string) {
-  const headers: Record<string, string> = { Title: encodeHeader(title), Tags: "tada" };
+export async function sendNtfy(
+  topic: string,
+  title: string,
+  message: string,
+  clickUrl?: string,
+  tags = "tada",
+) {
+  const headers: Record<string, string> = { Title: encodeHeader(title), Tags: tags };
   if (clickUrl) headers["Click"] = clickUrl;
   const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
     method: "POST",
@@ -139,7 +154,10 @@ function encodeHeader(v: string) {
   return /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${Buffer.from(v, "utf8").toString("base64")}?=`;
 }
 
-const MAX_TRANSIENT_FAILURES = 6;
+// Other temporary errors: ~16h of failures at one check per 20 min before giving up.
+const MAX_TRANSIENT_FAILURES = 48;
+// Re-alert about delayed checks at most this often per post.
+const DELAY_ALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 const MAX_PERMANENT_FAILURES = 3;
 
 type Post = Database["public"]["Tables"]["posts"]["Row"];
@@ -151,6 +169,18 @@ export async function checkPost(admin: Admin, post: Post) {
     stats = await fetchTikTokStats(post.url);
   } catch (e) {
     const err = e instanceof ScrapeError ? e : new ScrapeError(String(e), false);
+
+    if (err.rateLimited) {
+      // Provider is throttling us. Keep the post active and simply retry next cycle:
+      // no failure_count increment, no status change.
+      await admin
+        .from("posts")
+        .update({ last_error: err.message, last_checked_at: now })
+        .eq("id", post.id);
+      await alertChecksDelayed(admin, post);
+      return { ok: false as const, error: err.message };
+    }
+
     const failures = post.failure_count + 1;
     const limit = err.permanent ? MAX_PERMANENT_FAILURES : MAX_TRANSIENT_FAILURES;
     const status = failures >= limit ? (err.permanent ? "unavailable" : "failed") : post.status;
@@ -226,6 +256,35 @@ export async function checkPost(admin: Admin, post: Post) {
     await admin.from("milestones").update({ notified }).eq("id", m.id);
   }
   return { ok: true as const, views: stats.views, hits: hits.length };
+}
+
+async function alertChecksDelayed(admin: Admin, post: Post) {
+  const since = new Date(Date.now() - DELAY_ALERT_COOLDOWN_MS).toISOString();
+  const { data: recent } = await admin
+    .from("notifications")
+    .select("id")
+    .eq("post_id", post.id)
+    .like("message", "Checks delayed%")
+    .gte("created_at", since)
+    .limit(1);
+  if (recent && recent.length > 0) return;
+
+  const name = post.nickname || "a post";
+  const message = `Checks delayed for ${name}: the data provider is rate limiting. Still tracking, will retry automatically.`;
+  await admin.from("notifications").insert({ user_id: post.user_id, post_id: post.id, message });
+
+  const { data: settings } = await admin
+    .from("user_settings")
+    .select("ntfy_topic")
+    .eq("user_id", post.user_id)
+    .maybeSingle();
+  const topic = settings?.ntfy_topic || process.env["NTFY_TOPIC"];
+  if (!topic) return;
+  try {
+    await sendNtfy(topic, "Checks delayed", message, undefined, "warning");
+  } catch (e) {
+    console.error("ntfy failed", e);
+  }
 }
 
 function compactLabel(n: number) {
