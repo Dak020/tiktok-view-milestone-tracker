@@ -255,10 +255,10 @@ function DashboardPage() {
         )}
 
         <div className="space-y-3">
-          {cards.map(({ p, next, progress, spark, h1, h24, today }) => {
+                    {cards.map(({ p, next, progress, spark, h1, h24, today }) => {
             const isPaused = p.status === "paused";
             const isFailed = p.status === "failed" || p.status === "unavailable";
-
+            const pct = Math.min(100, Math.max(0, Math.round(progress * 100)));
             return (
               <Link
                 key={p.id}
@@ -334,7 +334,7 @@ function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Progress toward next milestone */}
+                               {/* Progress toward next milestone */}
                 <div className="mt-3.5 space-y-1.5 border-t border-border/40 pt-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">
@@ -346,10 +346,10 @@ function DashboardPage() {
                         <span className="text-success font-medium">All milestones hit</span>
                       )}
                     </span>
-                    {next && <span className="font-mono text-muted-foreground">{Math.round(progress)}%</span>}
+                    {next && <span className="font-mono text-muted-foreground">{pct}%</span>}
                   </div>
                   <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+                    <div className="progress-fill" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
 
