@@ -348,8 +348,9 @@ function DashboardPage() {
                     </span>
                     {next && <span className="font-mono text-muted-foreground">{pct}%</span>}
                   </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${pct}%` }} />
+                                  {/* Fixed (6px tall bar with rounded corners): */}
+                  <div className="h-1.5 w-full overflow-hidden rounded-full progress-track">
+                    <div className="h-full rounded-full progress-fill transition-all" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
 
