@@ -12,9 +12,10 @@ import {
   TrendingUp,
   RefreshCw,
   Users,
+  Clock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { compact, timeAgo, nextMilestone, progressToNext, gainedSince } from "@/lib/format";
+import { compact, timeAgo, addedAgo, nextMilestone, progressToNext, gainedSince } from "@/lib/format";
 import { Sparkline } from "@/components/tracker/Sparkline";
 import { MilestonePicker } from "@/components/tracker/MilestonePicker";
 import { Input } from "@/components/ui/input";
@@ -338,6 +339,7 @@ function DashboardPage() {
 
                 {/* Footer Stats Row */}
                 <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-xs text-muted-foreground">
+                  <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-3">
                     {p.likes != null && (
                       <span className="flex items-center gap-1">
@@ -355,6 +357,11 @@ function DashboardPage() {
                       </span>
                     )}
                   </div>
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground/60">
+                    <Clock className="h-3 w-3" /> {addedAgo(p.created_at)}
+                  </span>
+                  </div>
+
 
                   <div className="flex items-center gap-2">
                     {spark.length > 1 && (
