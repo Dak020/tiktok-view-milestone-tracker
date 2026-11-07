@@ -428,12 +428,23 @@ function TotalViewsSummary({
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-1" role="group" aria-label="Dashboard period">
+      <div
+        className="mt-3 inline-flex items-center gap-0.5 rounded-full border border-border/60 bg-background/40 p-0.5 text-xs"
+        role="group"
+        aria-label="Dashboard period"
+      >
         {(["today", "week", "all"] as const).map((value) => (
-          <Button key={value} type="button" size="sm" variant={period === value ? "chip" : "ghost"}
-            aria-pressed={period === value} onClick={() => onPeriodChange(value)}>
-            {value === "today" ? "Today" : value === "week" ? "This Week" : "All Time"}
-          </Button>
+          <button
+            key={value}
+            type="button"
+            aria-pressed={period === value}
+            onClick={() => onPeriodChange(value)}
+            className={`rounded-full px-3 py-1.5 font-medium transition-all ${
+              period === value ? "silver-chip shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {value === "today" ? "Today" : value === "week" ? "Week" : "All"}
+          </button>
         ))}
       </div>
 
