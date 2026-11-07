@@ -77,8 +77,9 @@ export const checkAllPosts = createServerFn({ method: "POST" })
       } catch (err) {
         console.error(`checkAllPosts error on post ${p.id}:`, err);
       }
+      // 10-second interval between each post check
       if (i < posts.length - 1) {
-        await new Promise((r) => setTimeout(r, 1250));
+        await new Promise((r) => setTimeout(r, 10000));
       }
     }
 
