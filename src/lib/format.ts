@@ -1,49 +1,243 @@
-# Tiktok View Milestone Tracker
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { toast } from "sonner";
+import { CheckCircle2, Circle, ExternalLink, Pause, Play, RefreshCw, Trash2, Pencil } from "@/components/tracker/Icon";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AppHeader } from "@/components/tracker/AppHeader";
+import { MilestonePicker } from "@/components/tracker/MilestonePicker";
+import { postQuery } from "@/components/tracker/data";
+import { checkNow } from "@/lib/tracker.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { compact, full, gainedSince, timeAgo, elapsedUnit, elapsedTicks, formatElapsedTick, formatElapsedPrecise } from "@/lib/format";
 
-Build a TikTok post view tracker web app (mobile-friendly, dark theme).
+export const Route = createFileRoute("/_authenticated/posts/$id")({
+  head: () => ({
+    meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { title: "Post details — ViewPulse" },
+      { name: "description", content: "View growth chart and milestones for a tracked TikTok post." },
+      { property: "og:title", content: "Post details — ViewPulse" },
+      { property: "og:description", content: "View growth chart and milestones for a tracked TikTok post." },
+    ],
+  }),
+  component: PostDetail,
+});
 
-CORE FLOW
-- Main screen has an "Add post" box: paste a TikTok link, set one or more milestone view counts (quick-pick chips: 10K, 50K, 100K, 500K, 1M, plus custom), optional nickname for the post.
-- Dashboard shows a card per tracked post: thumbnail/caption if available, current views, likes/comments/shares if available, a progress bar toward the NEXT unhit milestone, "last checked" time, and a small sparkline of view growth.
-- Tapping a card opens a detail page with a full growth chart (views over time), a milestone list showing hit/pending with timestamps, and options to edit milestones, pause tracking, or delete.
+function PostDetail() {
+  const { id } = Route.useParams();
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const check = useServerFn(checkNow);
+  const { data, isLoading, error } = useQuery(postQuery(id));
+  const [checking, setChecking] = useState(false);
 
-BACKEND (Supabase)
-- Tables: posts (id, url, nickname, current_views, status, created_at), milestones (id, post_id, target_views, hit_at nullable, notified boolean), view_snapshots (id, post_id, views, likes, comments, shares, checked_at), notifications (id, post_id, message, created_at, read).
-- A scheduled edge function runs every 30 minutes via cron. For each active post it calls a TikTok scraper API to get the current stats, saves a snapshot, updates current_views, and checks milestones.
-- When views >= a milestone target that has not been hit: mark it hit, set hit_at, send a push alert, and create a row in notifications. Each milestone fires only once.
-- Scraper API key stored as a Supabase secret (I'll supply it). Make the provider easy to swap by isolating the fetch in one function. Handle failed or private/deleted posts gracefully (mark status and stop retrying after repeated failures).
+  if (isLoading) return <><AppHeader back /><p className="p-10 text-center text-muted-foreground">Loading…</p></>;
+  if (error || !data) return <><AppHeader back /><p className="p-10 text-center text-muted-foreground">Post not found.</p></>;
+  const { post, milestones, snapshots } = data;
+  const refresh = () => qc.invalidateQueries();
 
-NOTIFICATIONS
-- Push alerts through ntfy: the edge function sends a POST to https://ntfy.sh/{NTFY_TOPIC} with a title ("Milestone hit 🎉") and a message like "Your post [nickname] just passed 50K views (52,340 now)". Add a click-through link to the post. NTFY_TOPIC is a secret I'll set.
-- Add a settings page where I enter my ntfy topic, with a "Send test notification" button.
-- Also show an in-app bell icon with the unread notifications list.
+  // x axis = time since the post was added to the app (not clock time)
+  const origin = new Date(post.created_at).getTime();
+  const chart = snapshots.map((s) => ({ t: Math.max(0, new Date(s.checked_at).getTime() - origin), views: s.views }));
+  const span = chart.reduce((mx, c) => Math.max(mx, c.t), 0);
+  const axisUnit = elapsedUnit(span);
+  const axisTicks = elapsedTicks(span);
+  const h1 = gainedSince(post.current_views, snapshots, 3600_000);
+  const h24 = gainedSince(post.current_views, snapshots, 24 * 3600_000);
 
-EXTRAS
-- Show how fast each post is growing (views gained in the last hour / 24h).
-- Sort posts by newest, most views, or closest to the next milestone.
-- Simple email login (Supabase auth) so the data is private.
+  async function runCheck() {
+    setChecking(true);
+    try {
+      const r = await check({ data: { id } });
+      if (r.ok) toast.success(`${full(r.views)} views`);
+      else toast.error(r.error);
+      refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
 
-Keep the UI clean and fast, with big tap targets for phone use.
+  async function togglePause() {
+    const status = post.status === "active" ? "paused" : "active";
+    await supabase.from("posts").update({ status, failure_count: 0 }).eq("id", id);
+    toast.success(status === "paused" ? "Tracking paused" : "Tracking resumed");
+    refresh();
+  }
 
-This project was built with [Lovable](https://lovable.dev).
+  async function remove() {
+    await supabase.from("posts").delete().eq("id", id);
+    toast.success("Post deleted");
+    qc.invalidateQueries();
+    navigate({ to: "/dashboard" });
+  }
 
-**Live app**: https://tiktok-view-milestone-tracker.lovable.app
+  return (
+    <div className="min-h-screen pb-16">
+      <AppHeader back title={post.nickname || "Post"} />
+      <main className="mx-auto max-w-2xl space-y-4 px-4 pt-4">
+        <section className="flex gap-4 surface-card">
+          <div className="grid h-28 w-20 shrink-0 place-items-center overflow-hidden rounded-[14px] border bg-secondary">
+            {!post.thumbnail_url && <Circle className="h-6 w-6 text-muted-foreground" />}
+            {post.thumbnail_url && <img src={post.thumbnail_url} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <p className="line-clamp-2 flex-1 text-sm text-muted-foreground">{post.caption || post.url}</p>
+              <StatusBadge status={post.status} />
+            </div>
+            <p className="mt-1 font-mono text-[38px] leading-tight font-extrabold silver-text">{full(post.current_views)}</p>
+            <p className="text-xs text-muted-foreground">views · checked {timeAgo(post.last_checked_at)}</p>
+            <a href={post.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center gap-1 text-sm text-primary underline underline-offset-4">
+              Open on TikTok <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        </section>
 
-## Build with Lovable
+        {post.last_error && (
+          <p className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">Last check failed: {post.last_error}</p>
+        )}
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/2837a7c6-ed42-4fda-b855-18c194ca4011).
+        <section className="grid grid-cols-5 gap-2 text-center">
+          <Stat label="Hour" value={`+${compact(h1 ?? 0)}`} accent />
+          <Stat label="24h" value={`+${compact(h24 ?? 0)}`} accent />
+          <Stat label="Likes" value={compact(post.likes)} />
+          <Stat label="Replies" value={compact(post.comments)} />
+          <Stat label="Shares" value={compact(post.shares)} />
+        </section>
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+        <section className="surface-card">
+          <h2 className="mb-3 font-bold">Views over time</h2>
+          {chart.length < 2 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">The chart fills in as checks run every 30 minutes.</p>
+          ) : (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chart} margin={{ left: -10, right: 4, top: 4 }}>
+                  <defs>
+                    <linearGradient id="v" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--chart-fill)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="var(--chart-fill)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
+                  <XAxis dataKey="t" type="number" domain={[0, "dataMax"]} ticks={axisTicks} tick={{ fill: "var(--label)", fontSize: 10 }}
+                    tickFormatter={(t) => formatElapsedTick(t as number, axisUnit)} />
+                  <YAxis tickFormatter={(v) => compact(v)} tick={{ fill: "var(--label)", fontSize: 10 }} width={50} />
+                  <Tooltip
+                    cursor={{ stroke: "var(--chart-guide)", strokeWidth: 1 }}
+                    contentStyle={{ background: "var(--tile)", border: "1px solid var(--control-border)", borderRadius: 12 }}
+                    labelFormatter={(t) => formatElapsedPrecise(t as number)}
+                    formatter={(v) => [full(v as number), "Views"]}
+                  />
+                  <Area dataKey="views" stroke="var(--chart-line)" strokeWidth={2} activeDot={{ r: 4, fill: "var(--highlight)", stroke: "var(--highlight)" }} fill="url(#v)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
 
-## Development
+        <section className="surface-card">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-bold">Milestones</h2>
+            <EditMilestones postId={id} current={milestones} onSaved={refresh} />
+          </div>
+          <ul className="divide-y">
+            {milestones.map((m) => (
+              <li key={m.id} className="flex items-center gap-3 py-3">
+                {m.hit_at ? <CheckCircle2 className="h-5 w-5 text-success" /> : <Circle className="h-5 w-5 text-muted-foreground" />}
+                <span className="font-mono font-bold">{compact(m.target_views)}</span>
+                <span className="ml-auto text-sm text-muted-foreground">
+                  {m.hit_at ? `Hit ${new Date(m.hit_at).toLocaleString()}` : `${full(Math.max(0, m.target_views - post.current_views))} to go`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+        <section className="grid grid-cols-3 gap-2">
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={runCheck} disabled={checking}>
+            <RefreshCw className={`h-5 w-5 ${checking ? "animate-spin" : ""}`} /> Check now
+          </Button>
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={togglePause}>
+            {post.status === "active" ? <><Pause className="h-5 w-5" />Pause</> : <><Play className="h-5 w-5" />Resume</>}
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px] text-destructive"><Trash2 className="h-5 w-5" />Delete</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+                <AlertDialogDescription>All its history and milestones will be removed.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="h-11">Cancel</AlertDialogCancel>
+                <AlertDialogAction className="h-11 bg-destructive text-destructive-foreground" onClick={remove}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </section>
+      </main>
+    </div>
+  );
+}
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="inner-tile min-w-0 !px-1.5 !py-3">
+      <p className={`font-mono text-base sm:text-lg font-bold ${accent ? "text-success" : ""}`}>{value}</p>
+      <p className="text-[10px] sm:text-[11px] text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function EditMilestones({
+  postId, current, onSaved,
+}: { postId: string; current: { id: string; target_views: number; hit_at: string | null }[]; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const existing = current.map((m) => m.target_views);
+    const toDelete = current.filter((m) => !value.includes(m.target_views)).map((m) => m.id);
+    const toAdd = value.filter((v) => !existing.includes(v));
+    if (toDelete.length) await supabase.from("milestones").delete().in("id", toDelete);
+    if (toAdd.length) await supabase.from("milestones").insert(toAdd.map((t) => ({ post_id: postId, target_views: t })));
+    setSaving(false);
+    setOpen(false);
+    toast.success("Milestones updated");
+    onSaved();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setValue(current.map((m) => m.target_views)); }}>
+      <DialogTrigger asChild>
+        <Button variant="secondary" size="sm" className="h-10 rounded-full"><Pencil className="h-4 w-4" /> Edit</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Edit milestones</DialogTitle></DialogHeader>
+        <MilestonePicker value={value} onChange={setValue} />
+        <Button className="h-12" onClick={save} disabled={saving || value.length === 0}>Save</Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "active") return null;
+  const tone = status === "paused" ? "text-muted-foreground" : "text-destructive";
+  return <span className={`inner-tile shrink-0 !px-2 !py-0.5 text-[11px] capitalize ${tone}`}>{status}</span>;
+}
