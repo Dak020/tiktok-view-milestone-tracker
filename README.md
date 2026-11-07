@@ -9,7 +9,7 @@ CORE FLOW
 
 BACKEND (Supabase)
 - Tables: posts (id, url, nickname, current_views, status, created_at), milestones (id, post_id, target_views, hit_at nullable, notified boolean), view_snapshots (id, post_id, views, likes, comments, shares, checked_at), notifications (id, post_id, message, created_at, read).
-- A scheduled edge function runs every 20 minutes via cron. For each active post it calls a TikTok scraper API to get the current stats, saves a snapshot, updates current_views, and checks milestones.
+- A scheduled edge function runs every 30 minutes via cron. For each active post it calls a TikTok scraper API to get the current stats, saves a snapshot, updates current_views, and checks milestones.
 - When views >= a milestone target that has not been hit: mark it hit, set hit_at, send a push alert, and create a row in notifications. Each milestone fires only once.
 - Scraper API key stored as a Supabase secret (I'll supply it). Make the provider easy to swap by isolating the fetch in one function. Handle failed or private/deleted posts gracefully (mark status and stop retrying after repeated failures).
 
