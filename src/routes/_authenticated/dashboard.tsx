@@ -1,37 +1,58 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Heart,
   MessageCircle,
   Share2,
+  ExternalLink,
+  ChevronRight,
   TrendingUp,
-  Pause,
-  AlertTriangle,
-  Loader2,
   RefreshCw,
-  Calendar,
-  Clock,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
-} from "@/components/tracker/Icon";
-import { AppHeader } from "@/components/tracker/AppHeader";
-import { Sparkline } from "@/components/tracker/Sparkline";
-import { MilestonePicker } from "@/components/tracker/MilestonePicker";
-import { postsQuery } from "@/components/tracker/data";
-import { addPost, checkAllPosts } from "@/lib/tracker.functions";
+  Users,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { compact, full, gainedSince, isTikTokUrl, nextMilestone, progressToNext, timeAgo } from "@/lib/format";
+import { compact, timeAgo, nextMilestone, progressToNext, gainedSince } from "@/lib/format";
+import { Sparkline } from "@/components/tracker/Sparkline";
+import { AddPostBox } from "@/components/tracker/MilestonePicker";
+import { AppHeader } from "@/components/tracker/AppHeader";
+import { checkAllPosts } from "@/lib/tracker.functions";
+
+type PostWithDetails = {
+  id: string;
+  url: string;
+  nickname: string | null;
+  caption: string | null;
+  thumbnail_url: string | null;
+  current_views: number;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  status: "active" | "paused" | "failed" | "unavailable";
+  last_checked_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  milestones: { id: string; target_views: number; hit_at: string | null }[];
+  view_snapshots: { views: number; checked_at: string }[];
+};
+
+const postsQuery = {
+  queryKey: ["posts"],
+  queryFn: async (): Promise<{ posts: PostWithDetails[] }> => {
+    const { data: posts, error } = await supabase
+      .from("posts")
+      .select("*, milestones(*), view_snapshots(views, checked_at)")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return { posts: (posts as unknown as PostWithDetails[]) ?? [] };
+  },
+};
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard — ViewPulse" },
       { name: "description", content: "Your tracked TikTok posts, views and milestone progress." },
@@ -44,7 +65,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 type Sort = "newest" | "views" | "closest";
 
-// Extract @username from TikTok URL or fallback to host/path for shortlinks
 function extractAccountHandle(url: string): string {
   const match = url.match(/@([a-zA-Z0-9_.-]+)/i);
   if (match && match[1]) {
@@ -70,7 +90,6 @@ function DashboardPage() {
   const [sort, setSort] = useState<Sort>("newest");
   const checkAll = useServerFn(checkAllPosts);
   const [checkingAll, setCheckingAll] = useState(false);
-  const autoCheckedRef = useRef(false);
 
   // 1. Supabase Realtime: auto-refresh UI when posts or snapshots change without manual page reload
   useEffect(() => {
@@ -88,29 +107,6 @@ function DashboardPage() {
       supabase.removeChannel(channel);
     };
   }, [queryClient]);
-
-  // 2. Client-side fallback check: If any active post hasn't been checked in >= 30 mins, check them automatically
-  useEffect(() => {
-    if (!data?.posts || autoCheckedRef.current || checkingAll) return;
-    const now = Date.now();
-    const staleThreshold = 30 * 60 * 1000; // 30 minutes
-    const hasStale = data.posts.some((p) => {
-      if (p.status !== "active") return false;
-      if (!p.last_checked_at) return true;
-      return now - new Date(p.last_checked_at).getTime() >= staleThreshold;
-    });
-
-    if (hasStale) {
-      autoCheckedRef.current = true;
-      setCheckingAll(true);
-      checkAll()
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["posts"] });
-        })
-        .catch(() => {})
-        .finally(() => setCheckingAll(false));
-    }
-  }, [data, checkAll, queryClient, checkingAll]);
 
   // Manual Check All Handler
   async function handleCheckAll() {
@@ -142,50 +138,55 @@ function DashboardPage() {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
     });
     const parts = formatter.formatToParts(now);
-    const getPart = (t: string) => parts.find((p) => p.type === t)?.value;
-    const h = Number(getPart("hour") ?? 0);
-    const min = Number(getPart("minute") ?? 0);
-    const s = Number(getPart("second") ?? 0);
-    const msSinceMidnight = (h * 3600 + min * 60 + s) * 1000;
+    const month = parts.find((p) => p.type === "month")?.value;
+    const day = parts.find((p) => p.type === "day")?.value;
+    const year = parts.find((p) => p.type === "year")?.value;
 
-    let totalViews = 0;
-    let todayGain = 0;
-    let h24Gain = 0;
-    let activeCount = 0;
+    const nyMidnightStr = `${year}-${month}-${day}T00:00:00`;
+    const nyMidnightUtcTime = new Date(
+      new Date(nyMidnightStr).toLocaleString("en-US", { timeZone: "America/New_York" })
+    ).getTime();
+    const offsetMs = new Date(nyMidnightStr).getTime() - nyMidnightUtcTime;
+    const startOfTodayMs = new Date(nyMidnightStr).getTime() + offsetMs;
 
     const activePosts = data.posts.filter((p) => p.status === "active");
-    const uniqueAccounts = new Set(activePosts.map((p) => extractAccountHandle(p.url)));
+    const activeCount = activePosts.length;
+    const totalViews = activePosts.reduce((acc, p) => acc + (p.current_views || 0), 0);
+
+    const uniqueAccounts = new Set<string>();
+    activePosts.forEach((p) => {
+      const handle = extractAccountHandle(p.url);
+      uniqueAccounts.add(handle);
+    });
     const accountCount = uniqueAccounts.size;
 
+    let todayGain = 0;
+    let h24Gain = 0;
+
+    activePosts.forEach((p) => {
+      const snaps = p.view_snapshots ?? [];
+      todayGain += gainedSince(snaps, p.current_views, startOfTodayMs);
+      h24Gain += gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
+    });
+
     const list = data.posts.map((p) => {
-      const ms = data.milestones.filter((m) => m.post_id === p.id);
-      const snaps = data.snapshots.filter((s) => s.post_id === p.id);
-      const next = nextMilestone(ms);
-
-      const h1 = gainedSince(p.current_views, snaps, 3600_000);
-      const h24 = gainedSince(p.current_views, snaps, 24 * 3600_000);
-      const today = gainedSince(p.current_views, snaps, msSinceMidnight);
-
-      if (p.status === "active") {
-        activeCount++;
-        totalViews += p.current_views;
-        todayGain += today ?? 0;
-        h24Gain += h24 ?? 0;
-      }
-
+      const next = nextMilestone(p.current_views, p.milestones ?? []);
+      const progress = progressToNext(p.current_views, next?.target_views ?? null);
+      const snaps = (p.view_snapshots ?? []).slice().sort(
+        (a, b) => new Date(a.checked_at).getTime() - new Date(b.checked_at).getTime()
+      );
+      const spark = snaps.map((s) => s.views);
+      const h1 = gainedSince(snaps, p.current_views, 60 * 60 * 1000);
+      const h24 = gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
+      const today = gainedSince(snaps, p.current_views, startOfTodayMs);
       return {
         p,
-        ms,
         next,
-        progress: progressToNext(p.current_views, ms),
-        remaining: next ? next.target_views - p.current_views : Infinity,
-        spark: snaps.map((s) => s.views),
+        progress,
+        remaining: next ? Math.max(0, next.target_views - p.current_views) : 0,
+        spark,
         h1,
         h24,
         today,
@@ -205,7 +206,7 @@ function DashboardPage() {
     <div className="min-h-screen pb-16">
       <AppHeader />
       <main className="mx-auto max-w-2xl space-y-5 px-4 pt-4">
-        {/* Total Views Summary Card — Placed ABOVE Add Post */}
+        {/* Total Views Summary Card */}
         <TotalViewsSummary
           summary={summary}
           cards={cards}
@@ -255,128 +256,123 @@ function DashboardPage() {
         )}
 
         <div className="space-y-3">
-                    {cards.map(({ p, next, progress, spark, h1, h24, today }) => {
+          {cards.map(({ p, next, progress, spark, h1, h24, today }) => {
             const isPaused = p.status === "paused";
             const isFailed = p.status === "failed" || p.status === "unavailable";
             const pct = Math.min(100, Math.max(0, Math.round(progress * 100)));
+
             return (
               <Link
                 key={p.id}
                 to="/posts/$id"
                 params={{ id: p.id }}
-                className="group block surface-card transition-all hover:border-foreground/25 active:scale-[0.995]"
+                className={`surface-card group block p-4 transition-all hover:border-foreground/30 active:scale-[0.99] ${
+                  isPaused ? "opacity-60" : ""
+                }`}
               >
                 <div className="flex items-start gap-3">
                   {p.thumbnail_url ? (
                     <img
                       src={p.thumbnail_url}
                       alt=""
-                      className="h-16 w-12 flex-shrink-0 rounded-[10px] object-cover ring-1 ring-border/50"
+                      className="h-20 w-16 shrink-0 rounded-xl object-cover ring-1 ring-border"
                       loading="lazy"
                     />
                   ) : (
-                    <div className="flex h-16 w-12 flex-shrink-0 items-center justify-center rounded-[10px] bg-secondary/50 text-muted-foreground">
-                      <Sparkles className="h-5 w-5 text-muted-foreground/60" />
+                    <div className="inner-tile flex h-20 w-16 shrink-0 items-center justify-center text-xs text-muted-foreground">
+                      No img
                     </div>
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate font-semibold text-foreground group-hover:text-silver-300">
-                        {p.nickname || (p.caption ? p.caption.slice(0, 36) : "Untitled post")}
-                      </h3>
-                      {isPaused && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-secondary/70 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          <Pause className="h-2.5 w-2.5" /> Paused
-                        </span>
-                      )}
-                      {isFailed && (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
-                          <AlertTriangle className="h-2.5 w-2.5" /> Error
-                        </span>
-                      )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-base font-semibold text-foreground group-hover:text-primary">
+                          {p.nickname || p.caption || "Untitled post"}
+                        </h2>
+                        {p.nickname && p.caption && (
+                          <p className="line-clamp-1 text-xs text-muted-foreground">{p.caption}</p>
+                        )}
+                      </div>
+                      <StatusBadge status={p.status} />
                     </div>
 
-                    <div className="mt-1 flex items-baseline gap-2">
-                      <span className="font-mono text-2xl font-extrabold tracking-tight silver-text">
+                    <div className="mt-2 flex items-baseline gap-2">
+                      <span className="silver-text text-2xl font-bold tracking-tight">
                         {compact(p.current_views)}
                       </span>
                       <span className="text-xs text-muted-foreground">views</span>
-                    </div>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      {p.likes !== null && (
-                        <span className="inline-flex items-center gap-1">
-                          <Heart className="h-3 w-3" />
-                          {compact(p.likes)}
-                        </span>
-                      )}
-                      {p.comments !== null && (
-                        <span className="inline-flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3" />
-                          {compact(p.comments)}
-                        </span>
-                      )}
-                      {p.shares !== null && (
-                        <span className="inline-flex items-center gap-1">
-                          <Share2 className="h-3 w-3" />
-                          {compact(p.shares)}
+                      {(h1 > 0 || h24 > 0) && (
+                        <span className="ml-auto flex items-center gap-1 text-xs font-medium text-emerald-400">
+                          <TrendingUp className="h-3 w-3" />
+                          {h1 > 0 ? `+${compact(h1)}/h` : `+${compact(h24)}/24h`}
                         </span>
                       )}
                     </div>
-                  </div>
 
-                  <div className="flex flex-col items-end gap-1">
-                    <Sparkline values={spark} />
-                    <span className="text-[11px] text-muted-foreground">
-                      {p.last_checked_at ? timeAgo(p.last_checked_at) : "pending"}
-                    </span>
+                    {/* Milestone Progress Bar */}
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>
+                          {next ? (
+                            <>
+                              Next: <strong className="text-foreground">{compact(next.target_views)}</strong>
+                            </>
+                          ) : (
+                            <span className="text-emerald-400 font-medium">All milestones hit</span>
+                          )}
+                        </span>
+                        {next && <span>{pct}%</span>}
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full progress-track">
+                        <div
+                          className="h-full rounded-full progress-fill transition-all duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                               {/* Progress toward next milestone */}
-                <div className="mt-3.5 space-y-1.5 border-t border-border/40 pt-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      {next ? (
-                        <>
-                          Next milestone: <b className="text-foreground">{compact(next.target_views)}</b>
-                        </>
-                      ) : (
-                        <span className="text-success font-medium">All milestones hit</span>
-                      )}
-                    </span>
-                    {next && <span className="font-mono text-muted-foreground">{pct}%</span>}
-                  </div>
-                                  {/* Fixed (6px tall bar with rounded corners): */}
-                  <div className="h-1.5 w-full overflow-hidden rounded-full progress-track">
-                    <div className="h-full rounded-full progress-fill transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-
-                {/* Growth Velocity Badges */}
-                <div className="mt-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                {/* Footer Stats Row */}
+                <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-xs text-muted-foreground">
                   <div className="flex items-center gap-3">
-                    {h1 !== null && (
-                      <span className="inline-flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3 text-success" />
-                        <span className="text-success font-medium">+{compact(h1)}</span> 1h
+                    {p.likes != null && (
+                      <span className="flex items-center gap-1">
+                        <Heart className="h-3 w-3" /> {compact(p.likes)}
                       </span>
                     )}
-                    {today !== null && (
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-foreground font-medium">+{compact(today)}</span> today
+                    {p.comments != null && (
+                      <span className="flex items-center gap-1">
+                        <MessageCircle className="h-3 w-3" /> {compact(p.comments)}
                       </span>
                     )}
-                    {h24 !== null && (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-muted-foreground font-medium">+{compact(h24)}</span> 24h
+                    {p.shares != null && (
+                      <span className="flex items-center gap-1">
+                        <Share2 className="h-3 w-3" /> {compact(p.shares)}
                       </span>
                     )}
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    {spark.length > 1 && (
+                      <div className="w-16">
+                        <Sparkline values={spark} />
+                      </div>
+                    )}
+                    <span className="text-[11px]">
+                      {p.last_checked_at ? timeAgo(p.last_checked_at) : "pending check"}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+                  </div>
                 </div>
+
+                {isFailed && p.last_error && (
+                  <p className="mt-2 text-xs text-destructive truncate">
+                    Last check failed: {p.last_error}
+                  </p>
+                )}
               </Link>
             );
           })}
@@ -386,7 +382,7 @@ function DashboardPage() {
   );
 }
 
-// Total Views Summary Component (Option C: Today in US ET + Rolling 24h + Total Views)
+// Summary Card Component
 function TotalViewsSummary({
   summary,
   cards,
@@ -401,212 +397,92 @@ function TotalViewsSummary({
     activeCount: number;
     accountCount: number;
   };
-  cards: any[];
+  cards: Array<{
+    p: PostWithDetails;
+    today: number;
+    h24: number;
+  }>;
   isLoading: boolean;
   checkingAll: boolean;
   onCheckAll: () => void;
 }) {
-  const [showTable, setShowTable] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   return (
-    <section className="surface-card">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="metric-label">Total Tracked Views</span>
-          <div className="mt-1 flex items-baseline gap-2">
-            <h1 className="font-mono text-4xl leading-none font-extrabold tracking-tight silver-text">
-              {isLoading ? "—" : full(summary.totalViews)}
-            </h1>
-            <span className="text-xs text-muted-foreground">({compact(summary.totalViews)})</span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            across {summary.activeCount} active {summary.activeCount === 1 ? "post" : "posts"}
-          </p>
-        </div>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          className="h-9 gap-1.5 px-3 text-xs"
+    <div className="surface-card p-5 relative overflow-hidden">
+      <div className="flex items-center justify-between gap-2">
+        <span className="metric-label">Overview</span>
+        <button
           onClick={onCheckAll}
-          disabled={checkingAll || isLoading || summary.activeCount === 0}
+          disabled={checkingAll || isLoading}
+          className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium silver-chip transition-all hover:opacity-90 disabled:opacity-50"
+          title="Check all active posts right now"
         >
-          {checkingAll ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-3.5 w-3.5" /> Check all now
-            </>
-          )}
-        </Button>
+          <RefreshCw className={`h-3 w-3 ${checkingAll ? "animate-spin text-foreground" : ""}`} />
+          <span>{checkingAll ? "Checking..." : "Check all now"}</span>
+        </button>
       </div>
 
-      {/* Metrics Row: Today's Gain vs Rolling 24h Gain */}
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        {/* Today's Gain (US Eastern Midnight Anchor) */}
-        <div className="inner-tile">
-          <p className="metric-label flex items-center gap-1.5">
-            Today (US)
+      <div className="mt-3 grid grid-cols-2 gap-4">
+        {/* Total Tracked Views */}
+        <div className="inner-tile p-3.5">
+          <p className="metric-label">Total Views</p>
+          <p className="silver-text text-2xl sm:text-3xl font-extrabold tracking-tight mt-1">
+            {isLoading ? "—" : compact(summary.totalViews)}
           </p>
-          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
-            {isLoading ? "—" : `+${full(summary.todayGain)}`}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {isLoading ? "—" : `+${compact(summary.todayGain)} · resets 12 AM ET / 5 AM local`}
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            across {summary.activeCount} active post{summary.activeCount === 1 ? "" : "s"}
           </p>
         </div>
 
-        {/* Rolling 24 Hours Gain */}
-        <div className="inner-tile">
-          <p className="metric-label flex items-center gap-1.5">
-            Rolling 24h
+        {/* Views Gained Today */}
+        <div className="inner-tile p-3.5">
+          <p className="metric-label">Gained Today (ET)</p>
+          <p className="silver-text text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 text-emerald-400">
+            {isLoading ? "—" : `+${compact(summary.todayGain)}`}
           </p>
-          <p className="mt-1 font-mono text-2xl leading-tight font-bold text-success break-all">
-            {isLoading ? "—" : `+${full(summary.h24Gain)}`}
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {isLoading ? "—" : `+${compact(summary.h24Gain)} in last 24 hours`}
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Past 24h: <span className="text-foreground font-medium">+{compact(summary.h24Gain)}</span>
           </p>
         </div>
       </div>
 
-      {/* Account Tracked Bar (Replacing likes, comments & shares) */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2.5 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">
-          {summary.accountCount} {summary.accountCount === 1 ? "account" : "accounts"} tracked
-        </span>
+      {/* Accounts Tracked Banner */}
+      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground border-t border-border/30 pt-3">
+        <div className="flex items-center gap-1.5">
+          <Users className="h-3.5 w-3.5" />
+          <span>
+            <strong className="text-foreground">{summary.accountCount}</strong> account
+            {summary.accountCount === 1 ? "" : "s"} tracked
+          </span>
+        </div>
 
         {cards.length > 0 && (
           <button
-            type="button"
-            onClick={() => setShowTable((v) => !v)}
-            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => setShowBreakdown((v) => !v)}
+            className="text-[11px] hover:text-foreground underline decoration-dotted transition-colors"
           >
-            {showTable ? "Hide post breakdown" : "View post breakdown"}
-            {showTable ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {showBreakdown ? "Hide post breakdown" : "View post breakdown"}
           </button>
         )}
       </div>
 
-      {/* Collapsible Breakdown Table */}
-      {showTable && cards.length > 0 && (
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border/40 bg-secondary/20 p-2">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-border/40 text-[10px] uppercase text-muted-foreground">
-                <th className="pb-1.5 pl-1">Post</th>
-                <th className="pb-1.5 text-right">Current</th>
-                <th className="pb-1.5 text-right">Today (US)</th>
-                <th className="pb-1.5 text-right">24h</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/20 font-mono">
-              {cards.map(({ p, today, h24 }) => (
-                <tr key={p.id} className="hover:bg-secondary/40">
-                  <td className="py-1.5 pl-1 font-sans font-medium text-foreground truncate max-w-[140px]">
-                    {p.nickname || p.caption || "Untitled"}
-                  </td>
-                  <td className="py-1.5 text-right text-muted-foreground">{compact(p.current_views)}</td>
-                  <td className="py-1.5 text-right text-success font-semibold">
-                    {today !== null ? `+${compact(today)}` : "—"}
-                  </td>
-                  <td className="py-1.5 text-right text-muted-foreground">
-                    {h24 !== null ? `+${compact(h24)}` : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Collapsible Per-Post Breakdown */}
+      {showBreakdown && cards.length > 0 && (
+        <div className="mt-3 space-y-1.5 border-t border-border/30 pt-3 text-xs">
+          {cards.map(({ p, today, h24 }) => (
+            <div key={p.id} className="flex items-center justify-between py-1 text-muted-foreground">
+              <span className="truncate max-w-[180px] sm:max-w-[240px] text-foreground font-medium">
+                {p.nickname || p.caption || "Untitled"}
+              </span>
+              <div className="flex items-center gap-3 font-mono text-[11px]">
+                <span className="text-emerald-400">+{compact(today)} today</span>
+                <span className="text-muted-foreground">({compact(h24)} / 24h)</span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
-    </section>
-  );
-}
-
-// Add Post Box Component
-function AddPostBox({ onAdded }: { onAdded: () => void }) {
-  const add = useServerFn(addPost);
-  const [url, setUrl] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [milestones, setMilestones] = useState<number[]>([10_000, 50_000, 100_000]);
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const cleanUrl = url.trim();
-
-    if (!cleanUrl) {
-      toast.error("Please paste a TikTok video link");
-      return;
-    }
-    if (!isTikTokUrl(cleanUrl)) {
-      toast.error("That doesn't look like a valid TikTok link (use tiktok.com/...)");
-      return;
-    }
-    if (milestones.length === 0) {
-      toast.error("Select at least one milestone to track");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await add({
-        data: {
-          url: cleanUrl,
-          nickname: nickname.trim() || undefined,
-          milestones,
-        },
-      });
-      toast.success("Post added! Checking initial views...");
-      setUrl("");
-      setNickname("");
-      onAdded();
-    } catch (err) {
-      toast.error((err as Error).message || "Failed to add post");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="surface-card space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold tracking-tight text-foreground">Add TikTok post</h2>
-        <span className="text-[11px] text-muted-foreground">Auto-checks every 20m</span>
-      </div>
-
-      <Input
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://www.tiktok.com/@creator/video/..."
-        className="h-12 text-sm"
-        disabled={submitting}
-      />
-
-      <Input
-        value={nickname}
-        onChange={(e) => setNickname(e.target.value)}
-        placeholder="Nickname (optional, e.g. 'Dance Reel')"
-        className="h-11 text-sm"
-        disabled={submitting}
-      />
-
-      <div className="space-y-1.5">
-        <label className="metric-label">Milestone targets</label>
-        <MilestonePicker value={milestones} onChange={setMilestones} />
-      </div>
-
-      <Button type="submit" disabled={submitting} className="w-full text-base font-semibold">
-        {submitting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" /> Adding & fetching stats...
-          </>
-        ) : (
-          "Start tracking"
-        )}
-      </Button>
-    </form>
+    </div>
   );
 }
