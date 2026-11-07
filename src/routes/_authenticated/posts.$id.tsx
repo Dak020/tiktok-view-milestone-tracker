@@ -16,7 +16,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { compact, full, gainedSince, timeAgo } from "@/lib/format";
+import { compact, full, gainedSince, timeAgo, elapsedUnit, elapsedTicks, formatElapsedTick, formatElapsedPrecise } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/posts/$id")({
   head: () => ({
@@ -45,7 +45,12 @@ function PostDetail() {
   const { post, milestones, snapshots } = data;
   const refresh = () => qc.invalidateQueries();
 
-  const chart = snapshots.map((s) => ({ t: new Date(s.checked_at).getTime(), views: s.views }));
+  // x axis = time since the post was added to the app (not clock time)
+  const origin = new Date(post.created_at).getTime();
+  const chart = snapshots.map((s) => ({ t: Math.max(0, new Date(s.checked_at).getTime() - origin), views: s.views }));
+  const span = chart.reduce((mx, c) => Math.max(mx, c.t), 0);
+  const axisUnit = elapsedUnit(span);
+  const axisTicks = elapsedTicks(span);
   const h1 = gainedSince(post.current_views, snapshots, 3600_000);
   const h24 = gainedSince(post.current_views, snapshots, 24 * 3600_000);
 
@@ -126,13 +131,13 @@ function PostDetail() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-                  <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tick={{ fill: "var(--label)", fontSize: 10 }}
-                    tickFormatter={(t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric" })} />
+                  <XAxis dataKey="t" type="number" domain={[0, "dataMax"]} ticks={axisTicks} tick={{ fill: "var(--label)", fontSize: 10 }}
+                    tickFormatter={(t) => formatElapsedTick(t as number, axisUnit)} />
                   <YAxis tickFormatter={(v) => compact(v)} tick={{ fill: "var(--label)", fontSize: 10 }} width={50} />
                   <Tooltip
                     cursor={{ stroke: "var(--chart-guide)", strokeWidth: 1 }}
                     contentStyle={{ background: "var(--tile)", border: "1px solid var(--control-border)", borderRadius: 12 }}
-                    labelFormatter={(t) => new Date(t as number).toLocaleString()}
+                    labelFormatter={(t) => formatElapsedPrecise(t as number)}
                     formatter={(v) => [full(v as number), "Views"]}
                   />
                   <Area dataKey="views" stroke="var(--chart-line)" strokeWidth={2} activeDot={{ r: 4, fill: "var(--highlight)", stroke: "var(--highlight)" }} fill="url(#v)" />
