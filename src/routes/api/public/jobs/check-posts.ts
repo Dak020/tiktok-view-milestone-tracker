@@ -20,11 +20,27 @@ export const Route = createFileRoute("/api/public/jobs/check-posts")({
 
         let ok = 0;
         let failed = 0;
-        for (const p of posts ?? []) {
-          const r = await checkPost(supabaseAdmin, p);
-          if (r.ok) ok++;
-          else failed++;
+        const postList = posts ?? [];
+
+        for (let i = 0; i < postList.length; i++) {
+          const p = postList[i];
+          if (!p) continue;
+
+          try {
+            const r = await checkPost(supabaseAdmin, p);
+            if (r.ok) ok++;
+            else failed++;
+          } catch (err) {
+            console.error(`Cron error on post ${p.id}:`, err);
+            failed++;
+          }
+
+          // 10-second interval between each post check to prevent burst rate limits
+          if (i < postList.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+          }
         }
+
         return Response.json({ checked: ok, failed });
       },
     },
