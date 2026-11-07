@@ -114,7 +114,7 @@ function PostDetail() {
         <section className="surface-card">
           <h2 className="mb-3 font-bold">Views over time</h2>
           {chart.length < 2 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">The chart fills in as checks run every 20 minutes.</p>
+            <p className="py-12 text-center text-sm text-muted-foreground">The chart fills in as checks run every 30 minutes.</p>
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
