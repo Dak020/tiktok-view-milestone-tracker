@@ -34,3 +34,4 @@ use the editor.
 - Milestones are claimed with a conditional update (`hit_at IS NULL`) before alerting, so each fires exactly once even if checks overlap.
 
 - Tracker visuals share semantic surface and gradient utilities in src/styles.css and a single inline SVG Icon component, so every screen stays consistent without altering tracking logic.
+- Dashboard periods use browser-safe Eastern calendar helpers and filter existing query results only; changing periods never triggers scraping or changes a post's tracking status.
