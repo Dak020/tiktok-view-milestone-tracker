@@ -16,7 +16,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { compact, timeAgo, nextMilestone, progressToNext, gainedSince } from "@/lib/format";
 import { Sparkline } from "@/components/tracker/Sparkline";
-import { AddPostBox } from "@/components/tracker/MilestonePicker";
+import { MilestonePicker } from "@/components/tracker/MilestonePicker";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { addPost } from "@/lib/tracker.functions";
+import { isTikTokUrl } from "@/lib/format";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { checkAllPosts } from "@/lib/tracker.functions";
 
@@ -167,20 +171,20 @@ function DashboardPage() {
 
     activePosts.forEach((p) => {
       const snaps = p.view_snapshots ?? [];
-      todayGain += gainedSince(snaps, p.current_views, startOfTodayMs);
-      h24Gain += gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
+      todayGain += gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
+      h24Gain += gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
     });
 
     const list = data.posts.map((p) => {
-      const next = nextMilestone(p.current_views, p.milestones ?? []);
-      const progress = progressToNext(p.current_views, next?.target_views ?? null);
+      const next = nextMilestone(p.milestones ?? []);
+      const progress = progressToNext(p.current_views, p.milestones ?? []);
       const snaps = (p.view_snapshots ?? []).slice().sort(
         (a, b) => new Date(a.checked_at).getTime() - new Date(b.checked_at).getTime()
       );
       const spark = snaps.map((s) => s.views);
-      const h1 = gainedSince(snaps, p.current_views, 60 * 60 * 1000);
-      const h24 = gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
-      const today = gainedSince(snaps, p.current_views, startOfTodayMs);
+      const h1 = gainedSince(p.current_views, snaps, 60 * 60 * 1000) ?? 0;
+      const h24 = gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
+      const today = gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
       return {
         p,
         next,
@@ -484,5 +488,50 @@ function TotalViewsSummary({
         </div>
       )}
     </div>
+  );
+}
+
+function AddPostBox({ onAdded }: { onAdded: () => void }) {
+  const add = useServerFn(addPost);
+  const [url, setUrl] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [milestones, setMilestones] = useState<number[]>([100_000]);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isTikTokUrl(url)) {
+      toast.error("Paste a valid TikTok link");
+      return;
+    }
+    if (milestones.length === 0) {
+      toast.error("Pick at least one milestone");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await add({ data: { url: url.trim(), nickname: nickname.trim() || undefined, milestones } });
+      if (res.result && !res.result.ok) toast.warning(`Added, but the first check failed: ${res.result.error}`);
+      else toast.success("Post added");
+      setUrl("");
+      setNickname("");
+      onAdded();
+    } catch (err) {
+      toast.error((err as Error).message || "Could not add post");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="surface-card space-y-3 p-5">
+      <span className="metric-label">Add post</span>
+      <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste TikTok link" className="h-11 text-base" />
+      <Input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="Nickname (optional)" maxLength={60} className="h-11 text-base" />
+      <MilestonePicker value={milestones} onChange={setMilestones} />
+      <Button type="submit" disabled={busy} className="h-11 w-full">
+        {busy ? "Adding..." : "Start tracking"}
+      </Button>
+    </form>
   );
 }
