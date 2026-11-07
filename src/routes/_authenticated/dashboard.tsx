@@ -23,6 +23,7 @@ import { addPost } from "@/lib/tracker.functions";
 import { isTikTokUrl } from "@/lib/format";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { checkAllPosts } from "@/lib/tracker.functions";
+import { easternMidnight, postsForPeriod, type DashboardPeriod } from "@/lib/dashboard-period";
 
 type PostWithDetails = {
   id: string;
@@ -57,6 +58,7 @@ const postsQuery = {
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard — ViewPulse" },
       { name: "description", content: "Your tracked TikTok posts, views and milestone progress." },
@@ -92,6 +94,17 @@ function DashboardPage() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery(postsQuery);
   const [sort, setSort] = useState<Sort>("newest");
+  const [period, setPeriod] = useState<DashboardPeriod>("today");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    const updateClock = () => setNow(Date.now());
+    window.addEventListener("focus", updateClock);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", updateClock);
+    };
+  }, []);
   const checkAll = useServerFn(checkAllPosts);
   const [checkingAll, setCheckingAll] = useState(false);
 
@@ -135,27 +148,9 @@ function DashboardPage() {
       };
     }
 
-    // US Eastern midnight (America/New_York) — 12:00 AM ET = 5:00 AM WAT / UTC+1
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    const parts = formatter.formatToParts(now);
-    const month = parts.find((p) => p.type === "month")?.value;
-    const day = parts.find((p) => p.type === "day")?.value;
-    const year = parts.find((p) => p.type === "year")?.value;
-
-    const nyMidnightStr = `${year}-${month}-${day}T00:00:00`;
-    const nyMidnightUtcTime = new Date(
-      new Date(nyMidnightStr).toLocaleString("en-US", { timeZone: "America/New_York" })
-    ).getTime();
-    const offsetMs = new Date(nyMidnightStr).getTime() - nyMidnightUtcTime;
-    const startOfTodayMs = new Date(nyMidnightStr).getTime() + offsetMs;
-
-    const activePosts = data.posts.filter((p) => p.status === "active");
+    const startOfTodayMs = easternMidnight(now);
+    const periodPosts = postsForPeriod(data.posts, period, now);
+    const activePosts = periodPosts.filter((p) => p.status === "active");
     const activeCount = activePosts.length;
     const totalViews = activePosts.reduce((acc, p) => acc + (p.current_views || 0), 0);
 
@@ -171,20 +166,20 @@ function DashboardPage() {
 
     activePosts.forEach((p) => {
       const snaps = p.view_snapshots ?? [];
-      todayGain += gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
-      h24Gain += gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
+      todayGain += gainedSince(p.current_views, snaps, now - startOfTodayMs, now) ?? 0;
+      h24Gain += gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000, now) ?? 0;
     });
 
-    const list = data.posts.map((p) => {
+    const list = periodPosts.map((p) => {
       const next = nextMilestone(p.milestones ?? []);
       const progress = progressToNext(p.current_views, p.milestones ?? []);
       const snaps = (p.view_snapshots ?? []).slice().sort(
         (a, b) => new Date(a.checked_at).getTime() - new Date(b.checked_at).getTime()
       );
       const spark = snaps.map((s) => s.views);
-      const h1 = gainedSince(p.current_views, snaps, 60 * 60 * 1000) ?? 0;
-      const h24 = gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
-      const today = gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
+      const h1 = gainedSince(p.current_views, snaps, 60 * 60 * 1000, now) ?? 0;
+      const h24 = gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000, now) ?? 0;
+      const today = gainedSince(p.current_views, snaps, now - startOfTodayMs, now) ?? 0;
       return {
         p,
         next,
@@ -204,7 +199,7 @@ function DashboardPage() {
       cards: list,
       summary: { totalViews, todayGain, h24Gain, activeCount, accountCount },
     };
-  }, [data, sort]);
+  }, [data, sort, period, now]);
 
   return (
     <div className="min-h-screen pb-16">
@@ -217,6 +212,8 @@ function DashboardPage() {
           isLoading={isLoading}
           checkingAll={checkingAll}
           onCheckAll={handleCheckAll}
+          period={period}
+          onPeriodChange={setPeriod}
         />
 
         {/* Add Post Form */}
@@ -255,7 +252,7 @@ function DashboardPage() {
 
         {!isLoading && cards.length === 0 && (
           <div className="rounded-[20px] border border-dashed border-border/60 p-8 text-center text-muted-foreground">
-            No posts tracked yet. Paste a TikTok link above to get started.
+            {period === "today" ? "No posts added today." : period === "week" ? "No posts added this week." : "No posts tracked yet."}
           </div>
         )}
 
@@ -393,6 +390,8 @@ function TotalViewsSummary({
   isLoading,
   checkingAll,
   onCheckAll,
+  period,
+  onPeriodChange,
 }: {
   summary: {
     totalViews: number;
@@ -409,6 +408,8 @@ function TotalViewsSummary({
   isLoading: boolean;
   checkingAll: boolean;
   onCheckAll: () => void;
+  period: DashboardPeriod;
+  onPeriodChange: (period: DashboardPeriod) => void;
 }) {
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -425,6 +426,15 @@ function TotalViewsSummary({
           <RefreshCw className={`h-3 w-3 ${checkingAll ? "animate-spin text-foreground" : ""}`} />
           <span>{checkingAll ? "Checking..." : "Check all now"}</span>
         </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-1" role="group" aria-label="Dashboard period">
+        {(["today", "week", "all"] as const).map((value) => (
+          <Button key={value} type="button" size="sm" variant={period === value ? "chip" : "ghost"}
+            aria-pressed={period === value} onClick={() => onPeriodChange(value)}>
+            {value === "today" ? "Today" : value === "week" ? "This Week" : "All Time"}
+          </Button>
+        ))}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-4">
