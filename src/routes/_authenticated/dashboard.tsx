@@ -490,3 +490,42 @@ function TotalViewsSummary({
     </div>
   );
 }
+
+function AddPostBox({ onAdded }: { onAdded: () => void }) {
+  const add = useServerFn(addPost);
+  const [url, setUrl] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [milestones, setMilestones] = useState<number[]>([100_000]);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!isTikTokUrl(url)) return toast.error("Paste a valid TikTok link");
+    if (milestones.length === 0) return toast.error("Pick at least one milestone");
+    setBusy(true);
+    try {
+      const res = await add({ data: { url: url.trim(), nickname: nickname.trim() || undefined, milestones } });
+      if (res.result && !res.result.ok) toast.warning(`Added, but the first check failed: ${res.result.error}`);
+      else toast.success("Post added");
+      setUrl("");
+      setNickname("");
+      onAdded();
+    } catch (err) {
+      toast.error((err as Error).message || "Could not add post");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="surface-card space-y-3 p-5">
+      <span className="metric-label">Add post</span>
+      <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste TikTok link" className="h-11 text-base" />
+      <Input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="Nickname (optional)" maxLength={60} className="h-11 text-base" />
+      <MilestonePicker value={milestones} onChange={setMilestones} />
+      <Button type="submit" disabled={busy} className="h-11 w-full">
+        {busy ? "Adding..." : "Start tracking"}
+      </Button>
+    </form>
+  );
+}
