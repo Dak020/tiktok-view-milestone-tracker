@@ -29,6 +29,7 @@ use the editor.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
 
+- The cron runs every minute and checks at most one due post per run — keeps scraper calls spaced out without sleeping in the handler (the scheduler cancels long handlers).
 - All TikTok scraping goes through `fetchTikTokStats` in src/lib/tracker.server.ts — swap providers only there so the cron job and "check now" stay in sync.
 - Milestones are claimed with a conditional update (`hit_at IS NULL`) before alerting, so each fires exactly once even if checks overlap.
 

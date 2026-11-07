@@ -500,8 +500,14 @@ function AddPostBox({ onAdded }: { onAdded: () => void }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isTikTokUrl(url)) return toast.error("Paste a valid TikTok link");
-    if (milestones.length === 0) return toast.error("Pick at least one milestone");
+    if (!isTikTokUrl(url)) {
+      toast.error("Paste a valid TikTok link");
+      return;
+    }
+    if (milestones.length === 0) {
+      toast.error("Pick at least one milestone");
+      return;
+    }
     setBusy(true);
     try {
       const res = await add({ data: { url: url.trim(), nickname: nickname.trim() || undefined, milestones } });
