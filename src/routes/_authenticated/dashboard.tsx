@@ -16,7 +16,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { compact, timeAgo, nextMilestone, progressToNext, gainedSince } from "@/lib/format";
 import { Sparkline } from "@/components/tracker/Sparkline";
-import { AddPostBox } from "@/components/tracker/MilestonePicker";
+import { MilestonePicker } from "@/components/tracker/MilestonePicker";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { addPost } from "@/lib/tracker.functions";
+import { isTikTokUrl } from "@/lib/format";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { checkAllPosts } from "@/lib/tracker.functions";
 
@@ -167,20 +171,20 @@ function DashboardPage() {
 
     activePosts.forEach((p) => {
       const snaps = p.view_snapshots ?? [];
-      todayGain += gainedSince(snaps, p.current_views, startOfTodayMs);
-      h24Gain += gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
+      todayGain += gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
+      h24Gain += gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
     });
 
     const list = data.posts.map((p) => {
-      const next = nextMilestone(p.current_views, p.milestones ?? []);
-      const progress = progressToNext(p.current_views, next?.target_views ?? null);
+      const next = nextMilestone(p.milestones ?? []);
+      const progress = progressToNext(p.current_views, p.milestones ?? []);
       const snaps = (p.view_snapshots ?? []).slice().sort(
         (a, b) => new Date(a.checked_at).getTime() - new Date(b.checked_at).getTime()
       );
       const spark = snaps.map((s) => s.views);
-      const h1 = gainedSince(snaps, p.current_views, 60 * 60 * 1000);
-      const h24 = gainedSince(snaps, p.current_views, 24 * 60 * 60 * 1000);
-      const today = gainedSince(snaps, p.current_views, startOfTodayMs);
+      const h1 = gainedSince(p.current_views, snaps, 60 * 60 * 1000) ?? 0;
+      const h24 = gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000) ?? 0;
+      const today = gainedSince(p.current_views, snaps, Date.now() - startOfTodayMs) ?? 0;
       return {
         p,
         next,
