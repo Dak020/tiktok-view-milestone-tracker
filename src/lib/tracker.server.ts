@@ -29,7 +29,8 @@ export class ScrapeError extends Error {
 /**
  * Strategy 1: Dedicated RapidAPI (if TIKTOK_SCRAPER_API_KEY is configured)
  */
-async function fetchViaRapidApi(url: string, key: string): Promise<TikTokStats> {
+async function fetchViaRapidApi(url: string, rawKey: string): Promise<TikTokStats> {
+  const key = rawKey.trim().replace(/\.+$/, "");
   const cleanUrl = url.trim().split("?")[0] ?? url.trim();
   const res = await fetch(`https://tiktok-scraper7.p.rapidapi.com/?hd=0&url=${encodeURIComponent(cleanUrl)}`, {
     headers: {
@@ -89,7 +90,6 @@ async function fetchViaTikWm(url: string): Promise<TikTokStats> {
       }
 
       lastError = json?.msg || "Invalid response";
-      // If we hit the 1 req/sec limit, wait 1.25s and retry
       if (typeof lastError === "string" && lastError.includes("1 request/second")) {
         await new Promise((r) => setTimeout(r, 1250));
         continue;
@@ -105,10 +105,11 @@ async function fetchViaTikWm(url: string): Promise<TikTokStats> {
 }
 
 /**
- * Multi-provider pipeline
+ * Multi-provider pipeline: RapidAPI primary -> TikWM fallback
  */
 export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
-  const key = process.env["TIKTOK_SCRAPER_API_KEY"];
+  const rawKey = process.env["TIKTOK_SCRAPER_API_KEY"];
+  const key = rawKey ? rawKey.trim().replace(/\.+$/, "") : undefined;
   const errors: string[] = [];
 
   if (key) {
@@ -154,9 +155,7 @@ function encodeHeader(v: string) {
   return /^[\x20-\x7e]*$/.test(v) ? v : `=?UTF-8?B?${Buffer.from(v, "utf8").toString("base64")}?=`;
 }
 
-// Other temporary errors: ~16h of failures at one check per 20 min before giving up.
 const MAX_TRANSIENT_FAILURES = 48;
-// Re-alert about delayed checks at most this often per post.
 const DELAY_ALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 const MAX_PERMANENT_FAILURES = 3;
 
@@ -171,8 +170,7 @@ export async function checkPost(admin: Admin, post: Post) {
     const err = e instanceof ScrapeError ? e : new ScrapeError(String(e), false);
 
     if (err.rateLimited) {
-      // Provider is throttling us. Keep the post active and simply retry next cycle:
-      // no failure_count increment, no status change.
+      // Provider is throttling us. Keep the post active and simply retry next cycle
       await admin
         .from("posts")
         .update({ last_error: err.message, last_checked_at: now })
@@ -288,5 +286,7 @@ async function alertChecksDelayed(admin: Admin, post: Post) {
 }
 
 function compactLabel(n: number) {
-  return new Intl.NumberFormat("en", { notation: "compact" }).format(n);
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return String(n);
 }
