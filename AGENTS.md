@@ -35,3 +35,4 @@ use the editor.
 
 - Tracker visuals share semantic surface and gradient utilities in src/styles.css and a single inline SVG Icon component, so every screen stays consistent without altering tracking logic.
 - Dashboard periods use browser-safe Eastern calendar helpers and filter existing query results only; changing periods never triggers scraping or changes a post's tracking status.
+- Post removal uses the existing archived status, never hard deletion; shared history helpers keep totals independent of scraper eligibility, and status guards protect stopped posts from queued checks.

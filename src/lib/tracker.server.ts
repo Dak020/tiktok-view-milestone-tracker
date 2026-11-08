@@ -2,6 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { newlyHit, full } from "./format";
+import { canCheckPost } from "./post-history";
 
 type Admin = SupabaseClient<Database>;
 
@@ -162,6 +163,11 @@ const MAX_PERMANENT_FAILURES = 3;
 type Post = Database["public"]["Tables"]["posts"]["Row"];
 
 export async function checkPost(admin: Admin, post: Post) {
+  // Re-read status: a queued check may hold a stale active row after pause/archive.
+  const { data: latest, error: statusError } = await admin.from("posts").select("status").eq("id", post.id).single();
+  if (statusError || !latest || !canCheckPost(latest.status)) {
+    return { ok: false as const, error: "Tracking is stopped for this post." };
+  }
   const now = new Date().toISOString();
   let stats: TikTokStats;
   try {
@@ -174,7 +180,7 @@ export async function checkPost(admin: Admin, post: Post) {
       await admin
         .from("posts")
         .update({ last_error: err.message, last_checked_at: now })
-        .eq("id", post.id);
+        .eq("id", post.id).eq("status", "active");
       await alertChecksDelayed(admin, post);
       return { ok: false as const, error: err.message };
     }
@@ -185,7 +191,7 @@ export async function checkPost(admin: Admin, post: Post) {
     await admin
       .from("posts")
       .update({ failure_count: failures, last_error: err.message, last_checked_at: now, status })
-      .eq("id", post.id);
+      .eq("id", post.id).eq("status", "active");
     if (status !== post.status) {
       await admin.from("notifications").insert({
         user_id: post.user_id,
@@ -194,6 +200,11 @@ export async function checkPost(admin: Admin, post: Post) {
       });
     }
     return { ok: false as const, error: err.message };
+  }
+
+  const { data: stillActive } = await admin.from("posts").select("status").eq("id", post.id).single();
+  if (!stillActive || !canCheckPost(stillActive.status)) {
+    return { ok: false as const, error: "Tracking stopped during this check; saved history is unchanged." };
   }
 
   await admin.from("view_snapshots").insert({
@@ -218,7 +229,7 @@ export async function checkPost(admin: Admin, post: Post) {
       last_error: null,
       last_checked_at: now,
     })
-    .eq("id", post.id);
+    .eq("id", post.id).eq("status", "active");
 
   const { data: ms } = await admin.from("milestones").select("*").eq("post_id", post.id);
   const hits = newlyHit(stats.views, ms ?? []);

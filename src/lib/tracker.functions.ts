@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { canCheckPost } from "./post-history";
 
 const addSchema = z.object({
   url: z.string().url().max(500).refine((u) => /(^|\.)tiktok\.com$/.test(new URL(u).hostname), "Not a TikTok link"),
@@ -51,6 +52,7 @@ export const checkNow = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: post, error } = await context.supabase.from("posts").select("*").eq("id", data.id).single();
     if (error || !post) throw new Error("Post not found");
+    if (!canCheckPost(post.status)) return { ok: false as const, error: "Resume tracking before checking this post." };
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { checkPost } = await import("./tracker.server");
     return checkPost(supabaseAdmin, post);
