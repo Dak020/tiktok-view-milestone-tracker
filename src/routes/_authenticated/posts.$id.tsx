@@ -9,6 +9,7 @@ import { AppHeader } from "@/components/tracker/AppHeader";
 import { MilestonePicker } from "@/components/tracker/MilestonePicker";
 import { postQuery } from "@/components/tracker/data";
 import { checkNow } from "@/lib/tracker.functions";
+import { canCheckPost, statusAfterToggle } from "@/lib/post-history";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +40,7 @@ function PostDetail() {
   const check = useServerFn(checkNow);
   const { data, isLoading, error } = useQuery(postQuery(id));
   const [checking, setChecking] = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
 
   if (isLoading) return <><AppHeader back /><p className="p-10 text-center text-muted-foreground">Loading…</p></>;
   if (error || !data) return <><AppHeader back /><p className="p-10 text-center text-muted-foreground">Post not found.</p></>;
@@ -69,17 +71,33 @@ function PostDetail() {
   }
 
   async function togglePause() {
-    const status = post.status === "active" ? "paused" : "active";
-    await supabase.from("posts").update({ status, failure_count: 0 }).eq("id", id);
-    toast.success(status === "paused" ? "Tracking paused" : "Tracking resumed");
-    refresh();
+    setSavingStatus(true);
+    try {
+      const status = statusAfterToggle(post.status);
+      const { error } = await supabase.from("posts").update({ status, failure_count: 0 }).eq("id", id);
+      if (error) throw error;
+      toast.success(post.status === "archived" ? "Post restored, tracking paused" : status === "paused" ? "Tracking paused" : "Tracking resumed");
+      await refresh();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingStatus(false);
+    }
   }
 
   async function remove() {
-    await supabase.from("posts").delete().eq("id", id);
-    toast.success("Post deleted");
-    qc.invalidateQueries();
-    navigate({ to: "/dashboard" });
+    setSavingStatus(true);
+    try {
+      const { error } = await supabase.from("posts").update({ status: "archived" }).eq("id", id);
+      if (error) throw error;
+      toast.success("Post archived; history saved");
+      await qc.invalidateQueries();
+      navigate({ to: "/logs" });
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingStatus(false);
+    }
   }
 
   return (
@@ -150,7 +168,7 @@ function PostDetail() {
         <section className="surface-card">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-bold">Milestones</h2>
-            <EditMilestones postId={id} current={milestones} onSaved={refresh} />
+            {post.status !== "archived" && <EditMilestones postId={id} current={milestones} onSaved={refresh} />}
           </div>
           <ul className="divide-y">
             {milestones.map((m) => (
@@ -166,24 +184,24 @@ function PostDetail() {
         </section>
 
         <section className="grid grid-cols-3 gap-2">
-          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={runCheck} disabled={checking}>
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={runCheck} disabled={checking || savingStatus || !canCheckPost(post.status)}>
             <RefreshCw className={`h-5 w-5 ${checking ? "animate-spin" : ""}`} /> Check now
           </Button>
-          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={togglePause}>
-            {post.status === "active" ? <><Pause className="h-5 w-5" />Pause</> : <><Play className="h-5 w-5" />Resume</>}
+          <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]" onClick={togglePause} disabled={savingStatus || checking}>
+            {post.status === "active" ? <><Pause className="h-5 w-5" />Pause</> : <><Play className="h-5 w-5" />{post.status === "archived" ? "Restore" : "Resume"}</>}
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="secondary" className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px] text-destructive"><Trash2 className="h-5 w-5" />Delete</Button>
+              <Button variant="secondary" disabled={savingStatus || checking || post.status === "archived"} className="h-[52px] gap-1.5 whitespace-normal px-2 text-xs sm:text-[13px]"><Trash2 className="h-5 w-5" />Archive</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete this post?</AlertDialogTitle>
-                <AlertDialogDescription>All its history and milestones will be removed.</AlertDialogDescription>
+                <AlertDialogTitle>Archive this post?</AlertDialogTitle>
+                <AlertDialogDescription>Tracking stops. Its views, chart and milestones stay saved in Archived logs and your totals.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel className="h-11">Cancel</AlertDialogCancel>
-                <AlertDialogAction className="h-11 bg-destructive text-destructive-foreground" onClick={remove}>Delete</AlertDialogAction>
+                <AlertDialogAction className="h-11" onClick={remove}>Archive</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -238,6 +256,6 @@ function EditMilestones({
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "active") return null;
-  const tone = status === "paused" ? "text-muted-foreground" : "text-destructive";
+  const tone = status === "paused" || status === "archived" ? "text-muted-foreground" : "text-destructive";
   return <span className={`inner-tile shrink-0 !px-2 !py-0.5 text-[11px] capitalize ${tone}`}>{status}</span>;
 }

@@ -25,6 +25,7 @@ import { isTikTokUrl } from "@/lib/format";
 import { AppHeader } from "@/components/tracker/AppHeader";
 import { checkAllPosts } from "@/lib/tracker.functions";
 import { easternMidnight, postsForPeriod, type DashboardPeriod } from "@/lib/dashboard-period";
+import { summarizeHistory, visiblePosts } from "@/lib/post-history";
 
 type PostWithDetails = {
   id: string;
@@ -36,7 +37,7 @@ type PostWithDetails = {
   likes: number | null;
   comments: number | null;
   shares: number | null;
-  status: "active" | "paused" | "failed" | "unavailable";
+  status: "active" | "paused" | "failed" | "unavailable" | "archived";
   last_checked_at: string | null;
   last_error: string | null;
   created_at: string;
@@ -145,31 +146,12 @@ function DashboardPage() {
     if (!data) {
       return {
         cards: [],
-        summary: { totalViews: 0, todayGain: 0, h24Gain: 0, activeCount: 0, accountCount: 0 },
+        summary: { totalViews: 0, todayGain: 0, h24Gain: 0, activeCount: 0, recordedCount: 0, accountCount: 0 },
       };
     }
 
     const startOfTodayMs = easternMidnight(now);
-    const periodPosts = postsForPeriod(data.posts, period, now);
-    const activePosts = periodPosts.filter((p) => p.status === "active");
-    const activeCount = activePosts.length;
-    const totalViews = activePosts.reduce((acc, p) => acc + (p.current_views || 0), 0);
-
-    const uniqueAccounts = new Set<string>();
-    activePosts.forEach((p) => {
-      const handle = extractAccountHandle(p.url);
-      uniqueAccounts.add(handle);
-    });
-    const accountCount = uniqueAccounts.size;
-
-    let todayGain = 0;
-    let h24Gain = 0;
-
-    activePosts.forEach((p) => {
-      const snaps = p.view_snapshots ?? [];
-      todayGain += gainedSince(p.current_views, snaps, now - startOfTodayMs, now) ?? 0;
-      h24Gain += gainedSince(p.current_views, snaps, 24 * 60 * 60 * 1000, now) ?? 0;
-    });
+    const periodPosts = postsForPeriod(visiblePosts(data.posts), period, now);
 
     const list = periodPosts.map((p) => {
       const next = nextMilestone(p.milestones ?? []);
@@ -198,7 +180,7 @@ function DashboardPage() {
 
     return {
       cards: list,
-      summary: { totalViews, todayGain, h24Gain, activeCount, accountCount },
+      summary: summarizeHistory(data.posts, period, now),
     };
   }, [data, sort, period, now]);
 
@@ -219,6 +201,12 @@ function DashboardPage() {
 
         {/* Add Post Form */}
         <AddPostBox onAdded={() => queryClient.invalidateQueries({ queryKey: ["posts"] })} />
+
+        <div className="flex justify-end">
+          <Button asChild variant="ghost" className="min-h-11 text-muted-foreground">
+            <Link to="/logs">Archived logs <ChevronRight className="h-4 w-4" /></Link>
+          </Button>
+        </div>
 
         {/* Posts List Header & Sort Controls */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
@@ -405,6 +393,7 @@ function TotalViewsSummary({
     todayGain: number;
     h24Gain: number;
     activeCount: number;
+    recordedCount: number;
     accountCount: number;
   };
   cards: Array<{
@@ -463,7 +452,7 @@ function TotalViewsSummary({
             {isLoading ? "—" : compact(summary.totalViews)}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            across {summary.activeCount} active post{summary.activeCount === 1 ? "" : "s"}
+            across {summary.recordedCount} recorded post{summary.recordedCount === 1 ? "" : "s"} · {summary.activeCount} active
           </p>
         </div>
 
