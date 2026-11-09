@@ -28,12 +28,17 @@ function SettingsPage() {
   const test = useServerFn(sendTestNotification);
   const [topic, setTopic] = useState("");
   const [showTopic, setShowTopic] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
-    supabase.from("user_settings").select("ntfy_topic").maybeSingle().then(({ data }) => setTopic(data?.ntfy_topic ?? ""));
+    supabase.from("user_settings").select("ntfy_topic, rapidapi_key").maybeSingle().then(({ data }) => {
+      setTopic(data?.ntfy_topic ?? "");
+      setApiKey(data?.rapidapi_key ?? "");
+    });
   }, []);
 
   async function save() {
@@ -46,7 +51,7 @@ function SettingsPage() {
     if (!u.user) return;
     const { error } = await supabase
       .from("user_settings")
-      .upsert({ user_id: u.user.id, ntfy_topic: t || null, updated_at: new Date().toISOString() });
+      .upsert({ user_id: u.user.id, ntfy_topic: t || null, rapidapi_key: apiKey.trim().replace(/\.+$/, "") || null, updated_at: new Date().toISOString() });
     if (error) {
       toast.error(error.message);
       throw error;
@@ -108,6 +113,32 @@ function SettingsPage() {
               <BellRing className="h-4 w-4" /> Send test
             </Button>
           </div>
+        </section>
+        <section className="space-y-3 surface-card">
+          <h2 className="font-bold">TikTok scraper key (optional)</h2>
+          <p className="text-sm text-muted-foreground">
+            Paste your own RapidAPI key for "Tiktok Scraper" by TIKWM for more reliable checks. Only you can see it. Without a key, the free public checker is used.
+          </p>
+          <div className="relative">
+            <Input
+              type={showKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Your RapidAPI key"
+              className="h-12 font-mono text-base pr-12"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+              aria-label={showKey ? "Hide key" : "Show key"}
+            >
+              <Eye className="h-4 w-4" />
+            </button>
+          </div>
+          <Button className="h-12 w-full" onClick={() => save().catch(() => {})}>Save key</Button>
         </section>
         <section className="flex items-center justify-between surface-card">
           <div className="min-w-0">
