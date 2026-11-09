@@ -141,16 +141,19 @@ export type Database = {
       user_settings: {
         Row: {
           ntfy_topic: string | null
+          rapidapi_key: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           ntfy_topic?: string | null
+          rapidapi_key?: string | null
           updated_at?: string
           user_id?: string
         }
         Update: {
           ntfy_topic?: string | null
+          rapidapi_key?: string | null
           updated_at?: string
           user_id?: string
         }
