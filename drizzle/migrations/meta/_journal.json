@@ -8,6 +8,13 @@
       "when": 1793915921774,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794243367107,
+      "tag": "0001_add_user_rapidapi_key",
+      "breakpoints": true
     }
   ]
 }

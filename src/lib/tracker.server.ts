@@ -108,8 +108,11 @@ async function fetchViaTikWm(url: string): Promise<TikTokStats> {
 /**
  * Multi-provider pipeline: RapidAPI primary -> TikWM fallback
  */
-export async function fetchTikTokStats(url: string): Promise<TikTokStats> {
-  const rawKey = process.env["TIKTOK_SCRAPER_API_KEY"];
+// The project secret key is only ever used for the app owner's posts; everyone else brings their own key.
+const OWNER_USER_ID = "6b44de79-af6e-4f17-adc6-db395976ba2f";
+
+export async function fetchTikTokStats(url: string, userKey?: string | null, ownerId?: string): Promise<TikTokStats> {
+  const rawKey = userKey?.trim() || (ownerId === OWNER_USER_ID ? process.env["TIKTOK_SCRAPER_API_KEY"] : undefined);
   const key = rawKey ? rawKey.trim().replace(/\.+$/, "") : undefined;
   const errors: string[] = [];
 
@@ -171,7 +174,8 @@ export async function checkPost(admin: Admin, post: Post) {
   const now = new Date().toISOString();
   let stats: TikTokStats;
   try {
-    stats = await fetchTikTokStats(post.url);
+    const { data: keyRow } = await admin.from("user_settings").select("rapidapi_key").eq("user_id", post.user_id).maybeSingle();
+    stats = await fetchTikTokStats(post.url, keyRow?.rapidapi_key, post.user_id);
   } catch (e) {
     const err = e instanceof ScrapeError ? e : new ScrapeError(String(e), false);
 
